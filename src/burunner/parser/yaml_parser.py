@@ -341,11 +341,6 @@ def _parse_environments(
             raise YamlParseError(
                 f"{source} env({env_name}): 环境配置必须是字典")
 
-        inherit = env_def.get("inherit")
-        if inherit is not None and not isinstance(inherit, str):
-            raise YamlParseError(
-                f"{source} env({env_name}): 'inherit' 必须是字符串")
-
         variables = env_def.get("variables") or {}
         if not isinstance(variables, dict):
             raise YamlParseError(
@@ -362,65 +357,12 @@ def _parse_environments(
 
         envs[env_name] = EnvConfig(
             name=env_name,
-            inherit=inherit.strip() if inherit else None,
             variables=variables,
             config=config,
             cookies=cookies,
         )
 
     return envs
-
-
-def _resolve_env_inheritance(
-    envs: dict[str, EnvConfig], source: Path,
-) -> dict[str, EnvConfig]:
-    """解析环境配置的继承关系，合并父环境的配置。"""
-    resolved: dict[str, EnvConfig] = {}
-
-    def _resolve_single(name: str, visited: set[str]) -> EnvConfig:
-        if name in resolved:
-            return resolved[name]
-        if name not in envs:
-            raise YamlParseError(
-                f"{source}: 环境 '{name}' 未定义")
-        if name in visited:
-            raise YamlParseError(
-                f"{source}: 环境继承存在循环引用: {' -> '.join(visited)} -> {name}")
-
-        env = envs[name]
-        if not env.inherit:
-            resolved[name] = env
-            return env
-
-        visited.add(name)
-        parent = _resolve_single(env.inherit, visited)
-
-        # 合并：父环境被子环境覆盖
-        merged_vars = {**parent.variables, **env.variables}
-        merged_config = {**parent.config, **env.config}
-
-        # cookies 合并：子环境同名 cookie 覆盖父环境
-        seen_keys: set[tuple[str, str]] = set()
-        merged_cookies: list[CookieItem] = []
-        for cookie in env.cookies + parent.cookies:
-            key = (cookie.name, cookie.domain)
-            if key not in seen_keys:
-                seen_keys.add(key)
-                merged_cookies.append(cookie)
-
-        resolved[name] = EnvConfig(
-            name=name,
-            inherit=env.inherit,
-            variables=merged_vars,
-            config=merged_config,
-            cookies=merged_cookies,
-        )
-        return resolved[name]
-
-    for env_name in envs:
-        _resolve_single(env_name, set())
-
-    return resolved
 
 
 def _expand_data_driven_cases(cases: list[TestCase]) -> list[TestCase]:
@@ -575,8 +517,7 @@ def load_files(paths: Iterable[str | Path], env_name: str | None = None) -> Test
     if raw_envs:
         source = suite.source_files[0] if suite.source_files else Path(
             "<unknown>")
-        parsed_envs = _parse_environments(raw_envs, source)
-        suite.environments = _resolve_env_inheritance(parsed_envs, source)
+        suite.environments = _parse_environments(raw_envs, source)
 
     # 应用环境配置到全局变量
     if env_name and suite.environments:

@@ -318,11 +318,7 @@ YAML 可定义多个环境配置（`environments`），通过 CLI `--env` 参数
 
 ```yaml
 environments:
-  base:
-    variables:
-      app_name: "BuRunner Demo"
   dev:
-    inherit: base
     variables:
       base_url: "dev.example.com"
       username: "dev_user"
@@ -334,15 +330,14 @@ environments:
         value: "dev-token"
         domain: ".dev.example.com"
   staging:
-    inherit: base
     variables:
       base_url: "staging.example.com"
   prod:
-    inherit: base
     variables:
       base_url: "prod.example.com"
     config:
       headless: true
+```
 
 cases:
   - name: 首页访问
@@ -358,7 +353,7 @@ burunner run tests.yaml --env dev
 burunner run tests.yaml --env staging
 ```
 
-环境支持继承（`inherit`），子环境会合并父环境的 `variables`、`config` 和 `cookies`（同名 key 子环境优先）。
+每个环境独立定义自己的 `variables`、`config` 和 `cookies`，互不继承。
 
 ---
 

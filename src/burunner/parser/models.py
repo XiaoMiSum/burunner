@@ -45,7 +45,6 @@ class EnvConfig:
     """单个环境的配置定义。"""
 
     name: str
-    inherit: str | None = None  # 继承的基础环境名
     variables: dict[str, str] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
     cookies: list["CookieItem"] = field(default_factory=list)
