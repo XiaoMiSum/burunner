@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "burunner"
+version = "0.1.0"
+description = "基于 browser-use 的自然语言浏览器测试框架"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "burunner" }]
+dependencies = [
+    "browser-use>=0.12.0",
+    "pyyaml>=6.0.2",
+    "click>=8.1.8",
+    "allure-python-commons>=2.14.3",
+    "openai>=1.60.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+google = ["google-generativeai>=0.8.0"]
+anthropic = ["anthropic>=0.40.0"]
+groq = ["groq>=0.13.0"]
+ollama = ["ollama>=0.4.0"]
+
+[project.scripts]
+burunner = "burunner.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["burunner*"]
+exclude = ["examples*", "tests*"]

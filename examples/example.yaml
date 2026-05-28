@@ -1,0 +1,141 @@
+# burunner 示例测试用例
+# 顶层是 dict 结构，包含 presets（预设步骤）和 cases（用例）。
+# 用例可通过 extends 字段继承预设的前置步骤。
+# 支持在预设、用例或顶层 config 中定义预设 cookies。
+# 支持 ${var} 变量替换和 ${func()} 函数调用。
+# 支持数据驱动：通过 data_source 指定 CSV/JSON/YAML 或内联数据。
+# 支持多环境配置：通过 --env 参数切换不同环境。
+
+# 顶层变量定义（全局生效，优先级最低）
+variables:
+  base_url: "example.com"
+  username: "testuser"
+  password: "testpass123"
+  company: "演示企业"
+
+# 多环境配置：使用 burunner run --env dev/staging/prod 切换
+environments:
+  # 基础环境（供其他环境继承）
+  base:
+    variables:
+      app_name: "BuRunner Demo"
+      timeout: "30"
+
+  # 开发环境
+  dev:
+    inherit: base
+    variables:
+      base_url: "dev.example.com"
+      username: "dev_user"
+      password: "dev_pass"
+      company: "开发测试企业"
+    config:
+      headless: false
+      max_steps: 50
+    cookies:
+      - name: env_token
+        value: "dev-token-xyz"
+        domain: ".dev.example.com"
+
+  # 预发布环境
+  staging:
+    inherit: base
+    variables:
+      base_url: "staging.example.com"
+      username: "staging_user"
+      password: "staging_pass"
+      company: "预发布企业"
+    config:
+      headless: true
+      max_steps: 30
+
+  # 生产环境
+  prod:
+    inherit: base
+    variables:
+      base_url: "www.example.com"
+      username: "prod_readonly"
+      password: "prod_pass"
+      company: "正式企业"
+    config:
+      headless: true
+      max_steps: 20
+      use_vision: false
+
+presets:
+  login_and_navigate:
+    description: 登录并导航到通道管理页面
+    # 预设级变量：继承该预设的用例自动获得
+    variables:
+      menu_path: "调度中心-消息中心-通道管理"
+    # 预设级 cookies：继承该预设的用例自动获得这些 cookies
+    cookies:
+      - name: session_token
+        value: "demo-session-abc123"
+        domain: ".example.com"
+        path: /
+        secure: true
+    steps:
+      - 访问：${base_url}，使用 ${username}、${password} 登录，选择 "${company}"
+      - 点击菜单"${menu_path}"
+
+cases:
+  # ---- 基础用例：变量替换 + 预设继承 ----
+  - name: 通道列表查询
+    description: 测试通道列表查询功能
+    extends: login_and_navigate
+    tags: [p1, smoke]
+    variables:
+      search_keyword: "示例通道"
+    steps:
+      - 在"通道名称"中输入"${search_keyword}"，点击"查询"按钮
+      - 验证列表中的数据 通道名称 都包含字符 "${search_keyword}"，如果列表中存在不包含该字符的 通道，则回复测试失败，否则回复测试成功
+
+  # ---- 数据驱动：CSV 文件数据源 ----
+  - name: 通道查询(CSV数据驱动)
+    description: 使用 CSV 数据文件驱动的通道查询测试
+    extends: login_and_navigate
+    tags: [p1, data-driven]
+    data_source: "test_data.csv"
+    data_name_field: channel_name
+    steps:
+      - 在"通道名称"中输入"${data.channel_name}"，点击"查询"按钮
+      - 验证查询结果预期为"${data.expected_result}"
+
+  # ---- 数据驱动：JSON 文件数据源 + 过滤 ----
+  - name: 用户登录验证(JSON数据驱动)
+    description: 使用 JSON 数据驱动的登录测试，仅测试普通用户
+    tags: [p2, data-driven]
+    data_source: "test_users.json"
+    data_filter: "role == 'user'"
+    data_name_field: username
+    steps:
+      - 访问：${base_url}，使用 ${data.username}、${data.password} 登录
+      - 验证当前用户角色为 "${data.role}"
+
+  # ---- 数据驱动：内联数据 ----
+  - name: 搜索功能测试(内联数据)
+    description: 使用内联数据驱动的搜索功能测试
+    extends: login_and_navigate
+    tags: [p1, data-driven]
+    data_source:
+      - keyword: "通道A"
+        expect_count: "5"
+      - keyword: "通道B"
+        expect_count: "3"
+      - keyword: "不存在的通道"
+        expect_count: "0"
+    data_name_field: keyword
+    steps:
+      - 在"通道名称"中输入"${data.keyword}"，点击"查询"按钮
+      - 验证查询结果数量为 ${data.expect_count} 条
+
+  # ---- 函数演示用例 ----
+  - name: 参数化函数演示
+    description: 演示内置函数调用
+    tags: [demo]
+    steps:
+      - 创建用户名为 "user_${random_string(6)}" 的测试账号
+      - 记录当前时间戳 ${timestamp()} 并验证页面显示日期为 ${date()}
+      - 在备注字段输入 "自动测试_${uuid()}"
+      - 验证环境变量 HOME 的值为 "${env(HOME)}"
