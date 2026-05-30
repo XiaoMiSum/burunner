@@ -1,5 +1,11 @@
 # burunner — 基于 browser-use 的自然语言浏览器测试框架
 
+[![Documentation](https://img.shields.io/badge/docs-online-blue)](https://xiaomisum.github.io/burunner/)
+[![PyPI](https://img.shields.io/pypi/v/burunner.svg)](https://pypi.org/project/burunner/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**📖 在线文档**: https://xiaomisum.github.io/burunner/
+
 burunner 是一个独立的端到端测试框架：
 
 - 用 YAML + 自然语言描述测试用例，无需写脚手架代码
