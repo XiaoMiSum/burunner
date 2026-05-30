@@ -11,12 +11,12 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "burunner" }]
 dependencies = [
-    "browser-use>=0.12.0",
+    "browser-use==0.12.9",
     "pyyaml>=6.0.2",
     "click==8.3.1",
     "allure-python-commons>=2.14.3",
-    "openai>=1.60.0",
-    "python-dotenv>=1.0.1",
+    "openai==2.16.0",
+    "python-dotenv==1.2.2",
 ]
 
 [project.optional-dependencies]

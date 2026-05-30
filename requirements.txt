@@ -7,8 +7,8 @@ playwright>=1.59.0
 pyyaml>=6.0.3
 click>=8.1.8
 allure-python-commons>=2.16.0
-openai>=2.36.0
-python-dotenv>=1.2.2
+openai==2.16.0
+python-dotenv==1.2.2
 
 # 可选依赖 (根据需要安装)
 # google-generativeai>=0.8.0    # Google Gemini 需要
