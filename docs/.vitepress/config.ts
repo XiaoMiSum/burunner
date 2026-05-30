@@ -19,7 +19,7 @@ export default defineConfig({
           { text: '开发', link: '/zh/development/contributing' },
           {
             text: 'GitHub',
-            link: 'https://github.com/browser-use/browser-use-runner',
+            link: 'https://github.com/XiaoMiSum/burunner',
           },
         ],
         sidebar: {
@@ -76,7 +76,7 @@ export default defineConfig({
       { text: 'Development', link: '/development/contributing' },
       {
         text: 'GitHub',
-        link: 'https://github.com/browser-use/browser-use-runner',
+        link: 'https://github.com/XiaoMiSum/burunner',
       },
     ],
 
@@ -122,7 +122,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/browser-use/browser-use-runner' },
+      { icon: 'github', link: 'https://github.com/XiaoMiSum/burunner' },
     ],
   },
 })

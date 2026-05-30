@@ -11,7 +11,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: GitHub
-      link: https://github.com/browser-use/browser-use-runner
+      link: https://github.com/XiaoMiSum/burunner
 
 features:
   - title: Natural Language
