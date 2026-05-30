@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'burunner',
   description: 'Natural language browser testing framework based on browser-use',
+  base: '/burunner/',
 
   locales: {
     root: {
