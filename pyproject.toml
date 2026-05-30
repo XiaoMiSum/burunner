@@ -13,7 +13,7 @@ authors = [{ name = "burunner" }]
 dependencies = [
     "browser-use>=0.12.0",
     "pyyaml>=6.0.2",
-    "click>=8.1.8",
+    "click==8.3.1",
     "allure-python-commons>=2.14.3",
     "openai>=1.60.0",
     "python-dotenv>=1.0.1",
