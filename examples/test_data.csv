@@ -1,4 +1,5 @@
-channel_name,expected_result,priority
-示例通道A,测试成功,p1
-示例通道B,测试成功,p2
-示例通道C,测试失败,p3
+search_keyword,expected_result,priority
+Python 教程,Python编程,smoke
+软件测试,自动化测试,p1
+人工智能,AI技术,p2
+机器学习,深度学习,p3

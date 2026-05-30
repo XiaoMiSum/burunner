@@ -1,5 +1,5 @@
 [
-  {"username": "alice", "password": "pass_alice", "role": "admin"},
-  {"username": "bob", "password": "pass_bob", "role": "user"},
-  {"username": "charlie", "password": "pass_charlie", "role": "user"}
+  {"username": "测试员小王", "search_term": "Python入门", "expected": "Python教程"},
+  {"username": "测试员小李", "search_term": "软件测试", "expected": "测试工具"},
+  {"username": "测试员小张", "search_term": "人工智能", "expected": "AI技术"}
 ]

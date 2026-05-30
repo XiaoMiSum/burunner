@@ -55,3 +55,8 @@ Thumbs.db
 # Project specific
 *.gif
 screenshots/
+
+# VitePress
+docs/.vitepress/dist
+docs/.vitepress/cache
+docs/node_modules

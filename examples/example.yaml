@@ -15,7 +15,7 @@ presets:
 # ============================================================
 config:
   llm_provider: openai
-  llm_model: gpt-4o
+  llm_model: oc/mimo-v2.5-free
   max_steps: 30
   headless: true
 
