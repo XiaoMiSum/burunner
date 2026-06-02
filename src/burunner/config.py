@@ -53,7 +53,7 @@ _YAML_SIMPLE_FIELDS: tuple[str, ...] = (
     "llm_provider", "llm_model", "llm_temperature", "llm_base_url",
     "headless", "keep_browser_open", "user_data_dir",
     "parallel", "max_steps", "case_timeout", "retry_count", "retry_delay",
-    "filter", "tags", "use_vision",
+    "filter", "tags", "use_vision", "browser_use_log",
 )
 
 # 环境配置 config 段中可直接透传的简单字段
@@ -96,7 +96,7 @@ class RunnerConfig:
 
     # 执行
     parallel: int = 1
-    max_steps: int = 30
+    max_steps: int = 0  # 0 表示动态计算（步骤数*20）
     case_timeout: int = 0  # 单用例超时（秒），0 表示不限制
     retry_count: int = 0  # 失败/错误用例重试次数，0 不重试
     retry_delay: float = 2.0  # 重试间隔（秒）
@@ -108,6 +108,7 @@ class RunnerConfig:
     results_dir: Path = field(default_factory=lambda: Path("./allure-results"))
     screenshots_dir: Path | None = None
     verbose: bool = False
+    browser_use_log: bool = False
 
     # 预设 Cookies（全局级别）
     cookies: list["CookieItem"] = field(default_factory=list)
@@ -135,13 +136,14 @@ class RunnerConfig:
             headless=_env_bool("BURUNNER_HEADLESS", True),
             browser_channel=os.getenv("BURUNNER_BROWSER_CHANNEL") or None,
             parallel=_env_int("BURUNNER_PARALLEL", 1),
-            max_steps=_env_int("BURUNNER_MAX_STEPS", 30),
+            max_steps=_env_int("BURUNNER_MAX_STEPS", 0),
             case_timeout=_env_int("BURUNNER_CASE_TIMEOUT", 0),
             retry_count=_env_int("BURUNNER_RETRY_COUNT", 0),
             retry_delay=_env_float("BURUNNER_RETRY_DELAY", 2.0),
             notify_channel=os.getenv("BURUNNER_NOTIFY_CHANNEL") or None,
             notify_webhook=os.getenv("BURUNNER_NOTIFY_WEBHOOK") or None,
             env_name=os.getenv("BURUNNER_ENV") or None,
+            browser_use_log=_env_bool("BURUNNER_BROWSER_USE_LOG", False),
         )
 
     def merge_yaml_config(self, yaml_cfg: dict[str, Any] | None) -> "RunnerConfig":

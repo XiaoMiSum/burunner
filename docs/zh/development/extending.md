@@ -94,9 +94,12 @@ burunner run examples/example.yaml --llm my_provider --model my-model --api-key 
 
 ## 新增通知渠道
 
-burunner 的通知系统采用 **工厂模式 + 注册表**（`src/burunner/notifier/`），新增渠道需实现通知器并注册。
+burunner 的通知系统采用 **插件化发现机制**（`src/burunner/notifier/`），支持两种扩展方式：
 
-### 步骤
+1. **内部扩展**：直接在 burunner 源代码中添加通知器
+2. **外部插件**：通过 `entry_points` 机制注册独立包（推荐）
+
+### 方式一：内部扩展（在源代码中添加）
 
 #### 1. 创建通知器类
 
@@ -150,17 +153,13 @@ class SlackNotifier(BaseNotifier):
 
 #### 2. 在工厂中注册
 
-编辑 `src/burunner/notifier/factory.py`：
+编辑 `src/burunner/notifier/factory.py`，在 `_discover_notifiers()` 的内置通知器部分添加：
 
 ```python
 from burunner.notifier.slack import SlackNotifier
 
-NOTIFIER_REGISTRY: dict[str, type[BaseNotifier]] = {
-    "wecom": WecomNotifier,
-    "feishu": FeishuNotifier,
-    "dingtalk": DingtalkNotifier,
-    "slack": SlackNotifier,  # 新增
-}
+# 在 _discover_notifiers() 函数中添加
+registry["slack"] = SlackNotifier
 ```
 
 #### 3. 使用
@@ -170,6 +169,111 @@ NOTIFIER_REGISTRY: dict[str, type[BaseNotifier]] = {
 BURUNNER_NOTIFY_CHANNEL=slack
 BURUNNER_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
 ```
+
+### 方式二：外部插件（通过 entry_points 注册）
+
+这是推荐的扩展方式，无需修改 burunner 源代码，只需发布独立的 Python 包。
+
+#### 1. 创建插件项目结构
+
+```
+burunner-notify-slack/
+├── pyproject.toml
+└── src/
+    └── burunner_notify_slack/
+        ├── __init__.py
+        └── notifier.py
+```
+
+#### 2. 实现通知器类
+
+```python
+# src/burunner_notify_slack/notifier.py
+
+from __future__ import annotations
+
+import json
+import logging
+import urllib.request
+
+from burunner.notifier.base import BaseNotifier, NotifyPayload
+
+logger = logging.getLogger("burunner.notifier.slack")
+
+
+class SlackNotifier(BaseNotifier):
+    """通过 Webhook 发送 Slack 通知。"""
+
+    def send(self, payload: NotifyPayload) -> bool:
+        """发送 Slack 通知。成功返回 True。"""
+        lines = self._build_summary_lines(payload)
+        body = {"text": "\n".join(lines)}
+
+        try:
+            req = urllib.request.Request(
+                self.webhook_url,
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status == 200
+        except Exception as e:
+            logger.error("Slack 通知发送失败: %s", e)
+            return False
+```
+
+**核心要求**：
+- 继承 `BaseNotifier`
+- 实现 `send(payload: NotifyPayload) -> bool`
+- 成功返回 `True`，失败返回 `False`（不抛异常）
+- 可复用 `self._build_summary_lines(payload)` 构建通知正文
+
+#### 3. 配置 pyproject.toml
+
+```toml
+[project]
+name = "burunner-notify-slack"
+version = "0.1.0"
+description = "Slack notifier plugin for burunner"
+dependencies = ["burunner"]
+
+[project.entry-points."burunner.notifiers"]
+slack = "burunner_notify_slack.notifier:SlackNotifier"
+```
+
+关键配置说明：
+- `[project.entry-points."burunner.notifiers"]` — 组名必须为 `burunner.notifiers`
+- `slack` — 插件名称，即 `BURUNNER_NOTIFY_CHANNEL` 的值
+- `"burunner_notify_slack.notifier:SlackNotifier"` — 指向通知器类的完整路径
+
+#### 4. 发布与使用
+
+```bash
+# 开发时本地安装
+pip install -e ./burunner-notify-slack
+
+# 或发布到 PyPI 后安装
+pip install burunner-notify-slack
+
+# 配置使用
+# .env
+BURUNNER_NOTIFY_CHANNEL=slack
+BURUNNER_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
+```
+
+安装后 burunner 会在启动时自动发现并加载该插件，无需修改任何配置文件。
+
+### 插件发现机制说明
+
+burunner 启动时，`factory.py` 中的 `_discover_notifiers()` 会：
+
+1. 注册内置通知器（wecom/feishu/dingtalk）
+2. 通过 `importlib.metadata.entry_points(group="burunner.notifiers")` 扫描外部插件
+3. 验证插件类是否为 `BaseNotifier` 的子类
+4. 注册到可用通知器字典中
+
+插件加载失败只会记录警告日志，不会影响 burunner 正常运行。
 
 ### NotifyPayload 可用字段
 
@@ -345,7 +449,7 @@ burunner 各扩展点的设计原则：
 | 扩展点 | 模式 | 核心接口 |
 | --- | --- | --- |
 | LLM Provider | 注册表 + 策略 | `ProviderSpec` + `PROVIDER_REGISTRY` |
-| 通知渠道 | 工厂 + 继承 | `BaseNotifier.send()` + `NOTIFIER_REGISTRY` |
+| 通知渠道 | 插件化发现 | `BaseNotifier.send()` + `entry_points` |
 | 数据源 | 后缀匹配 + 加载函数 | `resolve_data_source()` |
 | 浏览器驱动 | 参数扩展 | `create_session()` |
 | 报告器 | 注册表 + 继承 | `BaseReporter` + `REPORTER_REGISTRY` |

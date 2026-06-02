@@ -44,7 +44,7 @@ load_files() → load_yaml() → _resolve_extends() → _expand_data_driven_case
 - Parse preset definitions and resolve inheritance
 - Expand data-driven cases (CSV/JSON/YAML/inline)
 - Parse multi-environment configuration (environments)
-- Execute variable substitution (`${var}` / `${func()}`)
+- Execute variable substitution (`${var}` / `${func()}`) via Mako template engine
 
 ### 2. Case Scheduling Phase
 
@@ -56,7 +56,7 @@ run_suite() → Queue + Worker Pool → _run_with_retry() → _run_with_timeout(
 - Create asyncio Queue for task distribution
 - Progressively start Workers (0.3s interval to avoid resource spikes)
 - Per-case timeout control
-- Auto-retry for ERROR status
+- Auto-retry for INCOMPLETE and ERROR status (FAILED is never retried)
 
 ### 3. Case Execution Phase
 
@@ -92,7 +92,7 @@ run_case() → create_session() → inject_cookies() → Agent.run() → verdict
 | --- | --- |
 | `yaml_parser.py` | YAML loading, validation, preset inheritance, data-driven expansion, environment config |
 | `models.py` | Data models: `TestCase`, `TestSuite`, `TestTemplate`, `EnvConfig`, `CookieItem` |
-| `variables.py` | `${var}` variable substitution and `${func()}` built-in function engine |
+| `variables.py` | `${var}` variable substitution and `${func()}` function engine (powered by Mako template) |
 | `datasource.py` | Data source loading (CSV/JSON/YAML/inline), row filtering, and variable mapping |
 
 **Key Design Decisions**:
@@ -105,24 +105,36 @@ run_case() → create_session() → inject_cookies() → Agent.run() → verdict
 | File | Responsibility |
 | --- | --- |
 | `orchestrator.py` | Worker Pool scheduling, Queue task distribution, progressive start, exception isolation |
-| `executor.py` | Single case execution: browser session → Agent run → verdict → screenshot |
+| `executor.py` | Single case execution orchestration: coordinates session, agent, and verdict modules |
+| `agent_runner.py` | Browser-use Agent lifecycle: prompt building, Agent.run() invocation, history parsing |
+| `session_manager.py` | Browser session lifecycle: creation, cookie injection, cleanup |
+| `verdicts.py` | Verdict determination logic: analyzes agent output to produce PASSED/FAILED/INCOMPLETE/ERROR |
 | `result.py` | `CaseResult`, `SuiteResult`, `CaseStatus` data structures |
 | `progress.py` | Real-time progress tracker (terminal output) |
+| `history_parser.py` | Parses browser-use agent history for token usage and step details |
 
 **Key Design Decisions**:
 - Worker Pool pattern (`asyncio.Queue`): tasks distributed on-demand, worker count = min(parallel, case count)
 - Timeout control: `asyncio.wait_for` wraps execution, timeout returns ERROR status
-- Retry mechanism: only retries ERROR status, FAILED (business assertion failure) is never retried
+- Retry mechanism: retries INCOMPLETE and ERROR status, FAILED (business assertion failure) is never retried
 - Exception isolation: a single Worker exception does not affect other Workers
 
 ### executor (Executor)
+
+The executor module has been split into focused sub-modules for maintainability:
+
+- **`executor.py`**: Top-level orchestration — coordinates session_manager, agent_runner, and verdicts
+- **`agent_runner.py`**: Handles prompt construction, browser-use Agent invocation, and result extraction
+- **`session_manager.py`**: Manages Playwright browser session lifecycle (create, configure, teardown)
+- **`verdicts.py`**: Encapsulates all verdict determination logic
 
 **Verdict Determination Priority**:
 
 1. Agent returns `{"success": false, ...}` or contains failure keywords → FAILED
 2. `history.is_successful() == False` → FAILED
-3. Runtime exception (browser crash / LLM timeout / framework error) → ERROR
-4. Otherwise → PASSED (note: when both are unknown, treated as FAILED to avoid false positives)
+3. Agent exceeded max steps without completing → INCOMPLETE
+4. Runtime exception (browser crash / LLM timeout / framework error) → ERROR
+5. Otherwise → PASSED (note: when both are unknown, treated as FAILED to avoid false positives)
 
 ### llm (LLM Layer)
 

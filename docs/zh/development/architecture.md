@@ -57,6 +57,8 @@ run_suite() → Queue + Worker Pool → _run_with_retry() → _run_with_timeout(
 - 渐进启动 Worker（间隔 0.3s 避免资源尖峰）
 - 单用例超时控制
 - ERROR 状态自动重试
+- INCOMPLETE 状态自动重试（超过最大步骤数未完成）
+- FAILED 状态不重试（业务断言确定失败）
 
 ### 3. 用例执行阶段
 
@@ -67,7 +69,7 @@ run_case() → create_session() → inject_cookies() → Agent.run() → 结果�
 - 创建 Playwright 浏览器会话
 - 注入预设 Cookie（用例级 + 全局级）
 - 构建 task prompt 并调用 browser-use Agent
-- 解析 Agent 输出判定 PASSED/FAILED/ERROR
+- 解析 Agent 输出判定 PASSED/FAILED/INCOMPLETE/ERROR
 - 失败时自动截图
 
 ### 4. 报告输出阶段
@@ -92,7 +94,7 @@ run_case() → create_session() → inject_cookies() → Agent.run() → 结果�
 | --- | --- |
 | `yaml_parser.py` | YAML 加载、校验、预设继承解析、数据驱动展开、环境配置处理 |
 | `models.py` | 数据模型：`TestCase`, `TestSuite`, `TestTemplate`, `EnvConfig`, `CookieItem` |
-| `variables.py` | `${var}` 变量替换与 `${func()}` 内置函数调用引擎 |
+| `variables.py` | 基于 Mako 模板的变量替换与函数调用引擎（安全沙箱） |
 | `datasource.py` | 数据源加载（CSV/JSON/YAML/内联），数据行过滤与变量映射 |
 
 **关键设计**：
@@ -105,24 +107,41 @@ run_case() → create_session() → inject_cookies() → Agent.run() → 结果�
 | 文件 | 职责 |
 | --- | --- |
 | `orchestrator.py` | Worker Pool 并发调度、Queue 任务分发、渐进启动、异常隔离 |
-| `executor.py` | 单用例执行：浏览器会话 → Agent 运行 → 结果判定 → 截图 |
+| `executor.py` | 单用例执行编排：会话管理 → Agent 运行 → 结果判定 → 截图 |
+| `agent_runner.py` | Agent 执行封装：初始化 browser-use Agent 并运行，处理版本兼容性 |
+| `session_manager.py` | 浏览器会话生命周期管理：创建、Cookie 注入、安全关闭 |
+| `verdicts.py` | 结果判定引擎：从 Agent 执行结果判定用例状态（PASSED/FAILED/INCOMPLETE/ERROR） |
+| `history_parser.py` | Agent 运行历史解析：提取步骤数、最终输出、token 用量 |
 | `result.py` | `CaseResult`, `SuiteResult`, `CaseStatus` 数据结构 |
 | `progress.py` | 实时进度跟踪器（终端输出） |
 
 **关键设计**：
 - Worker Pool 模式（`asyncio.Queue`）：任务按需分发，Worker 数量 = min(parallel, 用例数)
 - 超时控制：`asyncio.wait_for` 包裹执行，超时返回 ERROR 状态
-- 重试机制：仅对 ERROR 状态重试，FAILED（业务断言失败）不重试
+- 重试机制：仅对 INCOMPLETE 和 ERROR 状态重试，FAILED（业务断言失败）不重试
 - 异常隔离：单个 Worker 异常不影响其他 Worker
+- 架构拆分：executor 责任拆分为四个单一职责模块（agent_runner、session_manager、verdicts、history_parser）
 
 ### executor（执行器）
 
-**结果判定优先级**：
+executor 模块已拆分为多个单一职责子模块：
 
-1. Agent 返回 `{"success": false, ...}` 或含"测试失败" → FAILED
-2. `history.is_successful() == False` → FAILED
-3. 运行期异常（浏览器崩溃/LLM 超时/框架异常） → ERROR
-4. 其余 → PASSED（注意：双重未知时视为 FAILED，避免误报）
+| 子模块 | 职责 |
+| --- | --- |
+| `executor.py` | 编排层：协调会话管理、Agent 运行、结果判定的完整流程 |
+| `agent_runner.py` | 负责 browser-use Agent 的初始化和执行，处理版本兼容性 |
+| `session_manager.py` | 管理浏览器会话生命周期（创建、Cookie 注入、安全关闭） |
+| `verdicts.py` | 从 Agent 执行结果中判定最终状态 |
+| `history_parser.py` | 解析 Agent 运行历史，提取步骤数、最终输出、token 用量 |
+
+**结果判定优先级**（`verdicts.py`）：
+
+1. 若 `error_occurred` → ERROR
+2. 若 `parsed.total_steps >= max_steps` → INCOMPLETE
+3. 若 Agent 输出包含 `{"success": true}` → PASSED
+4. 若 Agent 输出包含 `{"success": false}` → FAILED
+5. 若 `parsed.is_done == True` 且无明确结果 → FAILED（保守策略）
+6. 若 `parsed.is_done == False` → INCOMPLETE
 
 ### llm（LLM 层）
 
@@ -156,7 +175,7 @@ OpenAI / Azure OpenAI / Anthropic / Google / DeepSeek / Ollama / Grok / Mistral 
 | 文件 | 职责 |
 | --- | --- |
 | `base.py` | `BaseNotifier` 抽象基类 + `NotifyPayload` 载荷定义 |
-| `factory.py` | 注册表 `NOTIFIER_REGISTRY` + 工厂函数 `create_notifier()` |
+| `factory.py` | 插件化发现机制：内置注册 + `entry_points(group="burunner.notifiers")` 外部插件加载 |
 | `wecom.py` | 企业微信 Webhook（Markdown 格式） |
 | `feishu.py` | 飞书消息卡片 |
 | `dingtalk.py` | 钉钉 Markdown |

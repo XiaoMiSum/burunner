@@ -34,6 +34,7 @@ _STATUS_MAP_NAME = {
     CaseStatus.FAILED: "failed",
     CaseStatus.ERROR: "broken",
     CaseStatus.SKIPPED: "skipped",
+    CaseStatus.INCOMPLETE: "broken",
 }
 
 

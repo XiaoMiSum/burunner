@@ -96,7 +96,13 @@ burunner run examples/example.yaml --llm my_provider --model my-model --api-key 
 
 burunner's notification system uses a **Factory + Registry pattern** (`src/burunner/notifier/`). Adding a new channel requires implementing a notifier and registering it.
 
-### Steps
+There are two approaches:
+1. **Internal**: Add directly to the burunner source code (modify factory.py)
+2. **Plugin**: Create an external package with `entry_points` (no source changes needed)
+
+### Approach 1: Internal Registration
+
+#### Steps
 
 #### 1. Create a Notifier Class
 
@@ -170,6 +176,96 @@ NOTIFIER_REGISTRY: dict[str, type[BaseNotifier]] = {
 BURUNNER_NOTIFY_CHANNEL=slack
 BURUNNER_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
 ```
+
+### Approach 2: External Plugin (entry_points)
+
+For distributing a notifier as a standalone package without modifying burunner source code:
+
+#### 1. Create a Python Package
+
+```
+burunner-slack-notifier/
+├── pyproject.toml
+└── src/
+    └── burunner_slack/
+        ├── __init__.py
+        └── notifier.py
+```
+
+#### 2. Implement the Notifier
+
+```python
+# src/burunner_slack/notifier.py
+
+from __future__ import annotations
+
+import json
+import logging
+import urllib.request
+
+from burunner.notifier.base import BaseNotifier, NotifyPayload
+
+logger = logging.getLogger("burunner_slack")
+
+
+class SlackNotifier(BaseNotifier):
+    """Slack Webhook notifier plugin for burunner."""
+
+    def send(self, payload: NotifyPayload) -> bool:
+        """Send Slack notification. Returns True on success."""
+        lines = self._build_summary_lines(payload)
+        body = {"text": "\n".join(lines)}
+
+        try:
+            req = urllib.request.Request(
+                self.webhook_url,
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status == 200
+        except Exception as e:
+            logger.error("Slack notification failed: %s", e)
+            return False
+```
+
+#### 3. Configure entry_points in pyproject.toml
+
+```toml
+[project]
+name = "burunner-slack-notifier"
+version = "0.1.0"
+dependencies = ["burunner"]
+
+[project.entry-points."burunner.notifiers"]
+slack = "burunner_slack.notifier:SlackNotifier"
+```
+
+The entry point **name** (`slack`) becomes the value for `BURUNNER_NOTIFY_CHANNEL`. The entry point **value** is the dotted path to the notifier class.
+
+#### 4. Install and Use
+
+```bash
+# Install the plugin
+pip install burunner-slack-notifier
+
+# Configure
+BURUNNER_NOTIFY_CHANNEL=slack
+BURUNNER_NOTIFY_WEBHOOK=https://hooks.slack.com/services/T.../B.../xxx
+
+# Run tests — notifications will use the plugin automatically
+burunner run tests/*.yaml
+```
+
+#### How Discovery Works
+
+burunner's factory loads notifiers in this order:
+1. Check the built-in `NOTIFIER_REGISTRY` for a matching channel name
+2. Scan `entry_points(group="burunner.notifiers")` for external plugins
+3. If found, instantiate the class with the configured webhook URL
+
+This means external plugins can also **override** built-in notifiers by using the same channel name.
 
 ### NotifyPayload Fields
 
@@ -345,7 +441,7 @@ Design principles for burunner extension points:
 | Extension Point | Pattern | Core Interface |
 | --- | --- | --- |
 | LLM Provider | Registry + Strategy | `ProviderSpec` + `PROVIDER_REGISTRY` |
-| Notification Channel | Factory + Inheritance | `BaseNotifier.send()` + `NOTIFIER_REGISTRY` |
+| Notification Channel | Factory + Inheritance + entry_points | `BaseNotifier.send()` + `NOTIFIER_REGISTRY` / `entry_points` |
 | Data Source | Suffix matching + loader function | `resolve_data_source()` |
 | Browser Driver | Parameter extension | `create_session()` |
 | Reporter | Registry + Inheritance | `BaseReporter` + `REPORTER_REGISTRY` |

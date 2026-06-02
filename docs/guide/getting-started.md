@@ -46,11 +46,10 @@ burunner run my_first_test.yaml
 ## Expected Output
 
 ```
-Provider=openai  Model=gpt-4o  Browser=chromium  Parallel=1  Headless=True  Timeout=∞s  Retry=0  Env=default  Cases=1
-[1/1] Verify homepage title ... PASS (8.52s, tokens: 1205)
+[PASS]  Verify homepage title               elapsed=8.52s  tokens(in/out/total)=890/315/1205
 
 =================================================================
-Total: 1  Passed: 1  Failed: 0  Error:  0
+Total: 1  Passed: 1  Failed: 0  Error:  0  Incomplete: 0
 Total elapsed: 8.52s
 Total tokens: in=890  out=315  total=1205
 Allure results: ./allure-results  (run: allure serve ./allure-results)

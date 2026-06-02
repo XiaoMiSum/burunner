@@ -10,7 +10,7 @@ _DATEFMT = "%H:%M:%S"
 _INITIALIZED = False
 
 
-def setup_logging(verbose: bool = False) -> None:
+def setup_logging(verbose: bool = False, browser_use_log: bool = False) -> None:
     global _INITIALIZED
     if _INITIALIZED:
         return
@@ -25,10 +25,18 @@ def setup_logging(verbose: bool = False) -> None:
     root.setLevel(level)
     root.propagate = False
 
-    # 降低 browser-use 自身的 INFO 噪音（除非 verbose）
-    if not verbose:
-        for noisy in ("browser_use", "playwright", "httpx", "openai"):
-            logging.getLogger(noisy).setLevel(logging.WARNING)
+    # 控制 browser-use 相关日志
+    if not browser_use_log:
+        # 彻底静默 browser-use 日志（默认行为）
+        logging.getLogger("browser_use").setLevel(logging.CRITICAL)
+        logging.getLogger("playwright").setLevel(logging.CRITICAL)
+        logging.getLogger("httpx").setLevel(logging.CRITICAL)
+    elif not verbose:
+        # browser_use_log=True 但非 verbose：降为 WARNING
+        logging.getLogger("browser_use").setLevel(logging.WARNING)
+        logging.getLogger("playwright").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+    # verbose=True 且 browser_use_log=True 时：使用 DEBUG 级别（由顶层设置）
 
     _INITIALIZED = True
 

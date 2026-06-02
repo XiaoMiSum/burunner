@@ -19,6 +19,7 @@ class NotifyPayload:
     passed: int = 0
     failed: int = 0
     error: int = 0
+    incomplete: int = 0
     total_elapsed: float = 0.0
     env_name: str | None = None
     failed_cases: list[str] = field(default_factory=list)
@@ -44,7 +45,26 @@ class NotifyPayload:
 
 
 class BaseNotifier(ABC):
-    """通知器抽象基类。"""
+    """通知器抽象基类。
+
+    外部插件开发者需要继承此类并实现 send() 方法。
+
+    注册方式：在外部包的 pyproject.toml 中添加：
+
+        [project.entry-points."burunner.notifiers"]
+        my_channel = "my_package.module:MyNotifier"
+
+    实现示例：
+
+        from burunner.notifier import BaseNotifier, NotifyPayload
+
+        class MyNotifier(BaseNotifier):
+            def send(self, payload: NotifyPayload) -> bool:
+                # 发送通知逻辑
+                content = "\\n".join(self._build_summary_lines(payload))
+                # ... 发送到你的渠道
+                return True  # 成功返回 True
+    """
 
     def __init__(self, webhook_url: str) -> None:
         self.webhook_url = webhook_url
@@ -64,7 +84,8 @@ class BaseNotifier(ABC):
             f"**环境**: {payload.env_name or 'default'}",
             f"**耗时**: {payload.elapsed_text}",
             f"**统计**: 总计 {payload.total} | "
-            f"通过 {payload.passed} | 失败 {payload.failed} | 错误 {payload.error}",
+            f"通过 {payload.passed} | 失败 {payload.failed} | "
+            f"错误 {payload.error} | 未完成 {payload.incomplete}",
             f"**通过率**: {payload.pass_rate}",
         ]
         if payload.failed_cases:

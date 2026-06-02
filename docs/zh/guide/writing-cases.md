@@ -107,16 +107,48 @@ burunner run tests/*.yaml -k "登录" -t "smoke"
     - 执行复杂交互操作
 ```
 
+## 执行结果状态
+
+每个用例执行后会产生以下三种主要结果状态：
+
+| 状态 | 含义 | 触发条件 |
+| --- | --- | --- |
+| **PASSED** | 验证通过 | Agent 返回 `{"success": true}` 或含“测试成功” |
+| **FAILED** | 验证不通过 | Agent 返回 `{"success": false}` 或含“测试失败” |
+| **INCOMPLETE** | 执行未完成 | Agent 超过最大步骤数未完成任务 |
+
+此外还有辅助状态：
+
+| 状态 | 含义 | 触发条件 |
+| --- | --- | --- |
+| **ERROR** | 框架异常 | 浏览器崩溃、LLM 超时、未预期异常 |
+| **SKIPPED** | 跳过 | 用例被过滤条件排除 |
+
+### INCOMPLETE 触发条件
+
+当 Agent 实际执行步骤数 ≥ `max_steps` 时，用例被判定为 INCOMPLETE。`max_steps` 的计算规则：
+
+- 默认自动计算：`用例步骤数 × 20`（最少 20）
+- 可通过 `BURUNNER_MAX_STEPS` 环境变量或 `--max-steps` CLI 覆盖
+- 设为 `0` 表示使用自动计算
+
+### 重试规则
+
+- **INCOMPLETE** 和 **ERROR** 状态会触发自动重试（如已配置 `retry_count`）
+- **FAILED** 状态不会重试（业务断言失败是确定性结果）
+
 ## 测试结论判定规则
 
 burunner 自动在 prompt 末尾追加结论输出要求。判定优先级：
 
 | 优先级 | 条件 | 结论 |
 | --- | --- | --- |
-| 1 | Agent 返回 `success=false` 或文本含"测试失败" | **FAILED** |
-| 2 | `history.is_successful() == False` | **FAILED** |
-| 3 | 运行期异常（浏览器崩溃 / LLM 超时 / 框架异常） | **ERROR** |
-| 4 | 其余情况 | **PASSED** |
+| 1 | 运行期异常（浏览器崩溃 / LLM 超时 / 框架异常） | **ERROR** |
+| 2 | Agent 实际步骤数 ≥ max_steps | **INCOMPLETE** |
+| 3 | Agent 返回 `{"success": true}` | **PASSED** |
+| 4 | Agent 返回 `{"success": false}` 或文本含“测试失败” | **FAILED** |
+| 5 | Agent 正常结束但无明确结论 | **FAILED**（保守策略，避免误报） |
+| 6 | Agent 未正常结束 | **INCOMPLETE** |
 
 ## 完整示例
 

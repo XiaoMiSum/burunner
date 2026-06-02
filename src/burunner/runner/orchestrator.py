@@ -3,7 +3,7 @@
 优化亮点：
 - Worker Pool 模式：通过 asyncio.Queue 控制任务分发，避免一次性创建所有 Task
 - 单用例超时：防止挂起的 Agent/浏览器永久占用并发槽位
-- 自动重试：ERROR/FAILED 状态用例可配置重试次数
+- 自动重试：INCOMPLETE/ERROR 状态用例可配置重试次数（FAILED 不重试）
 - 渐进启动：并发 worker 逐个启动，避免瞬时资源尖峰
 - 异常隔离：单个 worker 异常不影响其他 worker
 """
@@ -59,6 +59,13 @@ async def _run_with_timeout(
     return await run_case(case, cfg, llm)
 
 
+def _should_retry(result: CaseResult) -> bool:
+    """判断是否需要重试。"""
+    return result.status in (CaseStatus.INCOMPLETE, CaseStatus.ERROR)
+    # FAILED 不重试：验证不通过视为真实失败
+    # PASSED / SKIPPED 不重试：无需重试
+
+
 async def _run_with_retry(
     case: TestCase,
     cfg: RunnerConfig,
@@ -69,16 +76,17 @@ async def _run_with_retry(
 ) -> CaseResult:
     """执行单用例，支持自动重试。
 
-    仅对 ERROR 状态（框架/浏览器异常）进行重试，FAILED 状态（业务断言失败）不重试。
+    对 INCOMPLETE（超过最大步骤数）和 ERROR（框架/浏览器异常）进行重试，
+    FAILED（验证不通过）不重试，视为真实失败。
     """
     result = await _run_with_timeout(case, cfg, llm, timeout)
 
     attempts = 0
-    while result.status == CaseStatus.ERROR and attempts < retry_count:
+    while _should_retry(result) and attempts < retry_count:
         attempts += 1
         logger.info(
-            "用例 '%s' 执行异常，%0.1fs 后第 %d/%d 次重试...",
-            case.name, retry_delay, attempts, retry_count,
+            "Case '%s' %s, retrying (%d/%d)...",
+            case.name, result.status.value, attempts, retry_count,
         )
         if retry_delay > 0:
             await asyncio.sleep(retry_delay)

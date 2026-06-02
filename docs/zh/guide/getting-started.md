@@ -41,11 +41,10 @@ burunner run my_first_test.yaml
 ## 预期输出
 
 ```
-Provider=openai  Model=gpt-4o  Browser=chromium  Parallel=1  Headless=True  Timeout=∞s  Retry=0  Env=default  Cases=1
-[1/1] 百度搜索验证 ... PASS (15.23s, tokens: 2105)
+[PASS]  百度搜索验证                       elapsed=15.23s  tokens(in/out/total)=1580/525/2105
 
 =================================================================
-Total: 1  Passed: 1  Failed: 0  Error:  0
+Total: 1  Passed: 1  Failed: 0  Error:  0  Incomplete: 0
 Total elapsed: 15.23s
 Total tokens: in=1580  out=525  total=2105
 Allure results: ./allure-results  (run: allure serve ./allure-results)

@@ -160,15 +160,33 @@ Override runtime settings for individual cases:
 
 burunner automatically appends a verdict prompt to each case. The agent must output a JSON conclusion: `{"success": true|false, "reason": "..."}` and call `done(success=...)`.
 
-### Verdict Priority (4 levels)
+### Verdict Priority (5 levels)
 
-| Priority | Condition                                              | Result     |
-| -------- | ------------------------------------------------------ | ---------- |
-| 1        | Agent returns `success=false` or text contains failure | **FAILED** |
-| 2        | `history.is_successful() == False`                     | **FAILED** |
-| 3        | Runtime exception (browser crash / LLM timeout / etc.) | **ERROR**  |
-| 4        | All other cases                                        | **PASSED** |
+| Priority | Condition                                              | Result         |
+| -------- | ------------------------------------------------------ | -------------- |
+| 1        | Agent returns `success=false` or text contains failure | **FAILED**     |
+| 2        | `history.is_successful() == False`                     | **FAILED**     |
+| 3        | Agent exceeded max steps without completing            | **INCOMPLETE** |
+| 4        | Runtime exception (browser crash / LLM timeout / etc.) | **ERROR**      |
+| 5        | All other cases                                        | **PASSED**     |
 
-- **PASSED**: The case completed successfully with all assertions met
-- **FAILED**: The case ran but business assertions were not satisfied
-- **ERROR**: The case could not complete due to infrastructure issues
+### Execution Results
+
+| Status       | Meaning                                                              | Retried? |
+| ------------ | -------------------------------------------------------------------- | -------- |
+| **PASSED**   | The case completed successfully with all assertions met              | No       |
+| **FAILED**   | The case ran but business assertions were not satisfied              | No       |
+| **INCOMPLETE** | The agent exceeded the maximum step limit without finishing         | Yes      |
+| **ERROR**    | The case could not complete due to infrastructure issues             | Yes      |
+
+### INCOMPLETE Status
+
+A case is marked **INCOMPLETE** when the browser-use agent reaches its maximum allowed steps without producing a final verdict. This typically means:
+
+- The task is too complex for the allocated step budget
+- The agent got stuck in a loop or navigated away from the target
+- The page had unexpected loading delays
+
+The maximum steps per case is dynamically calculated as `number_of_steps × 20` (minimum 20) by default, or can be set explicitly via `--max-steps` or `BURUNNER_MAX_STEPS`.
+
+INCOMPLETE cases are automatically retried when `retry_count > 0`.

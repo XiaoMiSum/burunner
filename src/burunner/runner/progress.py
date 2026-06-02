@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import sys
 import time
-import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -71,9 +70,9 @@ class ProgressTracker:
         self._passed = 0
         self._failed = 0
         self._errors = 0
+        self._incomplete = 0
 
         self._running: dict[str, _RunningCase] = {}  # case.name -> info
-        self._lock = threading.Lock()
 
         self._start_time = time.perf_counter()
         self._completed_times: list[float] = []  # 各用例耗时列表
@@ -85,34 +84,32 @@ class ProgressTracker:
         """用例开始执行时调用。"""
         if not self._enabled:
             return
-        with self._lock:
-            self._running[case.name] = _RunningCase(
-                case=case, index=index)
-            self._render()
+        self._running[case.name] = _RunningCase(case=case, index=index)
+        self._render()
 
     def on_case_complete(self, result: CaseResult) -> None:
         """用例完成时调用。"""
         if not self._enabled:
             return
-        with self._lock:
-            self._running.pop(result.case.name, None)
-            self._completed += 1
-            self._completed_times.append(result.elapsed)
-            if result.status == CaseStatus.PASSED:
-                self._passed += 1
-            elif result.status == CaseStatus.FAILED:
-                self._failed += 1
-            elif result.status == CaseStatus.ERROR:
-                self._errors += 1
-            self._render()
+        self._running.pop(result.case.name, None)
+        self._completed += 1
+        self._completed_times.append(result.elapsed)
+        if result.status == CaseStatus.PASSED:
+            self._passed += 1
+        elif result.status == CaseStatus.FAILED:
+            self._failed += 1
+        elif result.status == CaseStatus.ERROR:
+            self._errors += 1
+        elif result.status == CaseStatus.INCOMPLETE:
+            self._incomplete += 1
+        self._render()
 
     def finish(self) -> None:
         """所有用例执行完毕，清除进度显示。"""
         if not self._enabled:
             return
-        with self._lock:
-            self._clear_lines()
-            sys.stderr.flush()
+        self._clear_lines()
+        sys.stderr.flush()
 
     def _render(self) -> None:
         """渲染进度信息到终端。"""
@@ -131,6 +128,7 @@ class ProgressTracker:
             f"  {_color('PASS', '32')}:{self._passed}  "
             f"{_color('FAIL', '31')}:{self._failed}  "
             f"{_color('ERR', '33')}:{self._errors}  "
+            f"{_color('INC', '35')}:{self._incomplete}  "
             f"Elapsed: {_format_duration(elapsed)}  "
             f"ETA: {_format_duration(eta)}"
         )

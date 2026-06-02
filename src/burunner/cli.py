@@ -67,6 +67,7 @@ def main() -> None:
 @click.option("--no-progress", is_flag=True, default=False, help="关闭实时进度显示")
 @click.option("-e", "--env", "env_name", default=None, help="运行环境（对应 YAML 中 environments 定义）")
 @click.option("-v", "--verbose", is_flag=True, default=False)
+@click.option("--browser-use-log", is_flag=True, default=False, help="打印 browser-use 执行日志（默认关闭）")
 def run_cmd(
     paths: tuple[str, ...],
     filter_: str | None,
@@ -88,8 +89,9 @@ def run_cmd(
     no_progress: bool,
     env_name: str | None,
     verbose: bool,
+    browser_use_log: bool,
 ) -> None:
-    setup_logging(verbose=verbose)
+    setup_logging(verbose=verbose, browser_use_log=browser_use_log)
 
     # 1) 解析 YAML
     # 确定运行环境：CLI --env > 环境变量 BURUNNER_ENV
@@ -130,6 +132,7 @@ def run_cmd(
         keep_browser_open=keep_browser_open or None,
         use_vision=False if no_vision else None,
         verbose=verbose or None,
+        browser_use_log=browser_use_log or None,
     )
     cfg.source_files = [Path(p) for p in paths]
     cfg.ensure_dirs()
@@ -214,7 +217,7 @@ def run_cmd(
             )
             failed_names = [
                 r.case.name for r in suite_result.case_results
-                if r.status in (CaseStatus.FAILED, CaseStatus.ERROR)
+                if r.status in (CaseStatus.FAILED, CaseStatus.ERROR, CaseStatus.INCOMPLETE)
             ]
             payload = NotifyPayload(
                 suite_name=suite_name,
@@ -223,6 +226,7 @@ def run_cmd(
                 passed=suite_result.passed,
                 failed=suite_result.failed,
                 error=suite_result.error,
+                incomplete=suite_result.incomplete,
                 total_elapsed=suite_result.total_elapsed,
                 env_name=effective_env,
                 failed_cases=failed_names,

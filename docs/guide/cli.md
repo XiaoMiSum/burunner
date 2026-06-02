@@ -22,13 +22,14 @@ Run one or more YAML test files. Multiple file paths or glob patterns are accept
 | `--api-key TEXT`            |       | string  | —                 | LLM API key (overrides env var)                |
 | `--headless` / `--headed`   |       | flag    | `--headless`      | Browser visibility mode                        |
 | `--browser CHANNEL`         |       | choice  | `chromium`        | Browser channel                                |
-| `--max-steps INTEGER`       |       | integer | `30`              | Max agent steps per case                       |
+| `--max-steps INTEGER`       |       | integer | `0` (auto)        | Max agent steps per case (0=auto-calculate) |
 | `--case-timeout SECONDS`    |       | integer | `0` (no limit)    | Per-case timeout in seconds                    |
-| `--retry COUNT`             |       | integer | `0`               | Auto-retry count for errored cases             |
+| `--retry COUNT`             |       | integer | `0`               | Auto-retry count for INCOMPLETE/ERROR cases    |
 | `--results-dir PATH`        |       | path    | `./allure-results` | Allure results output directory               |
 | `--keep-browser-open`       |       | flag    | off               | Keep browser open after case (debug)           |
 | `--no-vision`               |       | flag    | off               | Disable `use_vision` capability                |
 | `--no-progress`             |       | flag    | off               | Disable real-time progress display             |
+| `--browser-use-log`         |       | flag    | off               | Enable browser-use library logging             |
 | `--env TEXT`                | `-e`  | string  | —                 | Activate a named environment from YAML         |
 | `--verbose`                 | `-v`  | flag    | off               | Enable verbose logging                         |
 
@@ -86,8 +87,16 @@ burunner run tests/*.yaml --env staging
 
 ### Headed Mode with Timeout and Retry
 
+Retries only apply to INCOMPLETE (agent exceeded max steps) and ERROR (infrastructure failure) results. Cases that FAILED (business assertion not satisfied) are never retried.
+
 ```bash
 burunner run tests/flaky.yaml --headed --case-timeout 120 --retry 2
+```
+
+### Enable browser-use Logging
+
+```bash
+burunner run tests/*.yaml --browser-use-log
 ```
 
 ### Use a Different Browser
@@ -157,26 +166,20 @@ burunner version
 
 When running tests, burunner displays:
 
-### Header Line
+### Per-Case Result
 
 ```
-Provider=openai  Model=gpt-4o  Browser=chromium  Parallel=2  Headless=True  Timeout=∞s  Retry=0  Env=default  Cases=5
-```
-
-### Per-Case Progress
-
-```
-[1/5] Login test ... PASS (12.34s, tokens: 1801)
-[2/5] Search feature ... FAIL (20.11s, tokens: 3090)
-      Screenshot: allure-results/screenshots/...
-[3/5] Register flow ... ERROR (5.02s, tokens: 450)
+[PASS]  Login test                        elapsed=12.34s  tokens(in/out/total)=1200/601/1801
+[FAIL]  Search feature                    elapsed=20.11s  tokens(in/out/total)=2000/1090/3090  screenshot=allure-results/screenshots/...
+[ERROR] Register flow                     elapsed=5.02s   tokens(in/out/total)=300/150/450  reason=Browser crashed
+[INCOMPLETE] Long scenario                elapsed=45.00s  tokens(in/out/total)=4000/1200/5200  reason=Max steps exceeded
 ```
 
 ### Summary
 
 ```
 =================================================================
-Total: 5  Passed: 3  Failed: 1  Error:  1
+Total: 5  Passed: 2  Failed: 1  Error: 1  Incomplete: 1
 Total elapsed: 45.67s
 Total tokens: in=5200  out=2100  total=7300
 Allure results: ./allure-results  (run: allure serve ./allure-results)

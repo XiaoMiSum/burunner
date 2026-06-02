@@ -138,3 +138,63 @@ BURUNNER_NOTIFY_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/your-token
 BURUNNER_NOTIFY_CHANNEL=dingtalk
 BURUNNER_NOTIFY_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=your-token
 ```
+
+## 插件化扩展
+
+burunner 的通知模块支持通过 Python `entry_points` 机制注册外部通知器插件。安装插件包后即可直接使用，无需修改 burunner 源代码。
+
+### 插件发现机制
+
+burunner 启动时会自动扫描 `burunner.notifiers` 组下的所有 entry_points：
+
+1. 内置通知器（wecom/feishu/dingtalk）始终可用
+2. 外部插件通过 `entry_points(group="burunner.notifiers")` 注册
+3. 插件名称即为 `BURUNNER_NOTIFY_CHANNEL` 的值
+
+### 开发外部插件
+
+#### 1. 创建通知器类
+
+```python
+# my_notifier_pkg/slack.py
+from burunner.notifier.base import BaseNotifier, NotifyPayload
+
+class SlackNotifier(BaseNotifier):
+    """自定义 Slack 通知器。"""
+
+    def send(self, payload: NotifyPayload) -> bool:
+        """发送通知，成功返回 True。"""
+        # 实现发送逻辑...
+        return True
+```
+
+#### 2. 配置 entry_points
+
+在插件包的 `pyproject.toml` 中声明：
+
+```toml
+[project.entry-points."burunner.notifiers"]
+slack = "my_notifier_pkg.slack:SlackNotifier"
+```
+
+或在 `setup.cfg` / `setup.py` 中：
+
+```ini
+[options.entry_points]
+burunner.notifiers =
+    slack = my_notifier_pkg.slack:SlackNotifier
+```
+
+#### 3. 安装并使用
+
+```bash
+pip install my-notifier-pkg
+
+# .env
+BURUNNER_NOTIFY_CHANNEL=slack
+BURUNNER_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
+```
+
+安装后 burunner 会自动发现并加载该插件，无需额外配置。
+
+> 更多插件开发细节请参考 [扩展开发指南](/zh/development/extending)。

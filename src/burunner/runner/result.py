@@ -15,6 +15,7 @@ class CaseStatus(str, Enum):
     FAILED = "FAILED"
     ERROR = "ERROR"   # 框架层异常 / 浏览器异常 / Agent 抛错
     SKIPPED = "SKIPPED"
+    INCOMPLETE = "INCOMPLETE"  # 执行未完成，超过最大步骤数
 
     def label(self) -> str:
         return {
@@ -22,6 +23,7 @@ class CaseStatus(str, Enum):
             CaseStatus.FAILED: "FAIL",
             CaseStatus.ERROR: "ERR ",
             CaseStatus.SKIPPED: "SKIP",
+            CaseStatus.INCOMPLETE: "INC ",
         }[self]
 
 
@@ -37,7 +39,8 @@ class CaseResult:
     screenshot_path: Path | None = None
     started_at: float = 0.0               # epoch ms
     stopped_at: float = 0.0               # epoch ms
-    step_outcomes: list[dict] = field(default_factory=list)  # 每步 status/desc，可选
+    step_outcomes: list[dict] = field(
+        default_factory=list)  # 每步 status/desc，可选
 
 
 @dataclass
@@ -62,6 +65,10 @@ class SuiteResult:
         return sum(1 for r in self.case_results if r.status == CaseStatus.ERROR)
 
     @property
+    def incomplete(self) -> int:
+        return sum(1 for r in self.case_results if r.status == CaseStatus.INCOMPLETE)
+
+    @property
     def total_tokens(self) -> TokenUsage:
         agg = TokenUsage()
         for r in self.case_results:
@@ -70,4 +77,4 @@ class SuiteResult:
 
     @property
     def is_success(self) -> bool:
-        return self.failed == 0 and self.error == 0
+        return self.failed == 0 and self.error == 0 and self.incomplete == 0

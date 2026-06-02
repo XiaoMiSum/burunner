@@ -42,9 +42,9 @@ burunner run PATH [PATH ...]
 | 选项 | 简写 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
 | `--parallel` | `-p` | INTEGER | `1` | 并行度 |
-| `--max-steps` | — | INTEGER | `30` | 单用例最大 Agent 步数 |
+| `--max-steps` | — | INTEGER | `0` | 单用例最大 Agent 步数（0=自动计算：步骤数×20，最少 20） |
 | `--case-timeout` | — | SECONDS | `0` | 单用例超时（0=不限） |
-| `--retry` | — | COUNT | `0` | 异常用例自动重试次数 |
+| `--retry` | — | COUNT | `0` | 自动重试次数（仅对 INCOMPLETE 和 ERROR 生效，FAILED 不重试） |
 
 ### 输出与环境
 
@@ -54,6 +54,7 @@ burunner run PATH [PATH ...]
 | `--no-progress` | — | FLAG | — | 关闭实时进度显示 |
 | `--env` | `-e` | TEXT | — | 运行环境名 |
 | `--verbose` | `-v` | FLAG | — | 详细输出 |
+| `--browser-use-log` | — | FLAG | — | 打印 browser-use 内部执行日志（默认关闭） |
 
 ## 常用组合示例
 
@@ -127,7 +128,7 @@ burunner run tests/*.yaml \
 | 退出码 | 含义 |
 | --- | --- |
 | `0` | 全部用例 PASSED |
-| `1` | 存在 FAILED 或 ERROR 用例 |
+| `1` | 存在 FAILED、ERROR 或 INCOMPLETE 用例 |
 
 适用于 CI/CD 流程中判断测试是否通过。
 
@@ -135,21 +136,21 @@ burunner run tests/*.yaml \
 
 运行时控制台输出：
 
+### 用例结果
+
 ```
-Provider=openai  Model=gpt-4o  Browser=chromium  Parallel=2  Headless=True  Timeout=∞s  Retry=0  Env=default  Cases=5
-[1/5] 登录功能 ... PASS (12.34s, tokens: 1801)
-[2/5] 搜索功能 ... PASS (8.56s, tokens: 1205)
-[3/5] 订单创建 ... FAIL (20.11s, tokens: 3090)
-      截图: allure-results/screenshots/...
-[4/5] 个人信息 ... PASS (6.78s, tokens: 980)
-[5/5] 退出登录 ... PASS (5.12s, tokens: 756)
+[PASS]  登录功能                         elapsed=12.34s  tokens(in/out/total)=1200/601/1801
+[PASS]  搜索功能                         elapsed=8.56s   tokens(in/out/total)=800/405/1205
+[FAIL]  订单创建                         elapsed=20.11s  tokens(in/out/total)=2000/1090/3090  screenshot=allure-results/screenshots/...
+[PASS]  个人信息                         elapsed=6.78s   tokens(in/out/total)=600/380/980
+[PASS]  退出登录                         elapsed=5.12s   tokens(in/out/total)=500/256/756
 
 =================================================================
-Total: 5  Passed: 4  Failed: 1  Error:  0
+Total: 5  Passed: 4  Failed: 1  Error:  0  Incomplete: 0
 Total elapsed: 52.91s
-Total tokens: in=5544  out=2288  total=7832
+Total tokens: in=5100  out=2732  total=7832
 Allure results: ./allure-results  (run: allure serve ./allure-results)
 =================================================================
 ```
 
-每条用例输出：序号、名称、结果（PASS/FAIL/ERROR）、耗时、token 消耗。失败用例额外输出截图路径。
+每条用例输出：序号、名称、结果（PASS/FAIL/ERR/INC）、耗时、token 消耗。失败用例额外输出截图路径。

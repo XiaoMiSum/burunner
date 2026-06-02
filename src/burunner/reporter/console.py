@@ -24,6 +24,8 @@ def _status_label(status: CaseStatus) -> str:
         return _color(f"[{label}]", "31")    # red
     if status == CaseStatus.ERROR:
         return _color(f"[{label}]", "33")    # yellow
+    if status == CaseStatus.INCOMPLETE:
+        return _color(f"[{label}]", "35")    # magenta
     return f"[{label}]"
 
 
@@ -52,7 +54,8 @@ def print_summary(suite: SuiteResult, *, results_dir: str | None = None) -> None
         f"Total: {suite.total}  "
         f"Passed: {_color(str(suite.passed), '32')}  "
         f"Failed: {_color(str(suite.failed), '31')}  "
-        f"Error:  {_color(str(suite.error), '33')}",
+        f"Error:  {_color(str(suite.error), '33')}  "
+        f"Incomplete: {_color(str(suite.incomplete), '35')}",
         flush=True,
     )
     print(f"Total elapsed: {suite.total_elapsed:.2f}s", flush=True)

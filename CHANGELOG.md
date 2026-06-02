@@ -9,13 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 引入 Mako 模板引擎作为变量与函数系统底层,支持 `${expression}` 内联 Python 表达式求值
+- 新增 `INCOMPLETE` 执行状态，表示 Agent 执行未完成（超过最大步骤数）
+- 新增 browser-use 执行日志开关（`BURUNNER_BROWSER_USE_LOG`），默认关闭
+- 新增 CLI 选项 `--browser-use-log` 控制 browser-use 日志输出
+- 通知模块插件化，支持外部包通过 `entry_points(group="burunner.notifiers")` 注册自定义通知器
+- 新增 `HistoryParser` 类统一封装 browser-use Agent history 对象解析
+- 新增 `VerdictJudge` 类独立封装结果判定逻辑
+- 新增 `managed_session` async context manager 管理浏览器会话生命周期
+- 新增 `agent_runner.py` 封装 Agent 初始化与版本兼容性处理
+- Agent 最大步骤数支持动态计算（测试步骤数 × 20），可通过 `BURUNNER_MAX_STEPS` 环境变量覆盖
+- Mako 模板安全沙箱：输入预检 + 运行时隔离，阻止任意代码执行
+- **完整的单元测试体系**
+  - 23 个测试文件,458 个测试用例
+  - 模块覆盖率 93.1% (27/29)
+  - 测试通过率 100% (456 passed, 0 failed)
+  - 核心功能 100% 覆盖 (Parser/Runner/Notifier/Utils/Browser/LLM)
+
 ### Changed
+
+- 变量系统底层从自定义正则解析改为 Mako 模板引擎渲染，保留 `${var}` / `${func()}` 语法
+- 重试规则重新设计：仅 INCOMPLETE 和 ERROR 状态触发重试，FAILED（验证不通过）不再重试
+- `executor.py` 拆分为 4 个独立模块（verdicts / session_manager / agent_runner / executor）
+- `max_steps` 默认值改为 0（自动计算），不再硬编码 30
+- 环境变量命名统一：移除 `BROWSER_USE_MAX_STEPS`，统一使用 `BURUNNER_MAX_STEPS`
+- 通知工厂从静态注册表改为 `importlib.metadata` 动态插件发现
+- `progress.py` 移除不必要的 `threading.Lock`（asyncio 单线程无需线程锁）
+- 执行结果判定逻辑优化为 5 级优先级判定链
+- `NotifyPayload` 增加 `incomplete` 字段，统计行显示未完成用例数
 
 ### Fixed
 
-## [0.1.0] - 2024-XX-XX
+- 修复 Mako 模板 `${...}` 表达式存在的任意代码执行安全漏洞
+- 修复 browser-use 日志在非 verbose 模式下仍然输出大量信息的问题
+- 修复浏览器会话在异常时可能泄露的资源管理问题（改用 async context manager）
+
+## [0.1.0] - 2026-05-30
 
 ### Added
+
 - 基于 browser-use 的自然语言浏览器测试框架
 - 支持多 LLM provider（OpenAI/Azure/Anthropic/Google/DeepSeek/Ollama/Grok/Mistral/阿里云/ModelScope/MoonShot/SiliconFlow/IBM/Unbound）
 - 支持多浏览器类型（Chromium/Chrome/Chrome Beta/Chrome Dev/Chrome Canary/Edge/Edge Beta/Edge Dev/Edge Canary）
@@ -73,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - TestPyPI 测试发布
 
 ### Changed
+
 - 环境变量统一命名规范（`BURUNNER_LLM_*` 前缀）
 - 配置合并逻辑采用元数据驱动
 - notifier 采用注册表模式
@@ -80,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - datasource 采用模板方法模式
 
 ### Fixed
+
 - 用例继承时数据驱动字段透传
 - 变量解析支持点号语法（`data.field`）
 - Python 3.10+ 类型注解兼容性

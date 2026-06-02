@@ -141,18 +141,17 @@ burunner run tests/*.yaml --env staging
 ### 3. Output
 
 ```
-Provider=openai  Model=gpt-4o  Browser=chromium  Parallel=2  Headless=True  Timeout=∞s  Retry=0  Env=staging  Cases=10
-[1/10] Login test ... PASS (8.2s, tokens: 1200)
+[PASS]  Login test                        elapsed=8.20s   tokens(in/out/total)=800/400/1200
 ...
-[10/10] Logout test ... PASS (5.1s, tokens: 800)
+[PASS]  Logout test                       elapsed=5.10s   tokens(in/out/total)=500/300/800
 
 =================================================================
-Total: 10  Passed: 10  Failed: 0  Error:  0
-Total elapsed: 65.3s
+Total: 10  Passed: 10  Failed: 0  Error:  0  Incomplete: 0
+Total elapsed: 65.30s
 Total tokens: in=8000  out=3500  total=11500
 Allure results: ./allure-results  (run: allure serve ./allure-results)
 =================================================================
-通知已发送。
+Notification sent.
 ```
 
 ## Disabling Notifications
@@ -164,3 +163,82 @@ BURUNNER_NOTIFY_CHANNEL=
 ```
 
 Or remove both variables from your `.env` file entirely.
+
+## Plugin System
+
+burunner's notification system is fully pluggable. External packages can register custom notifiers via Python's `entry_points` mechanism.
+
+### How It Works
+
+When burunner initializes, it discovers all notifiers registered under the `burunner.notifiers` entry point group. This means you can create a standalone Python package that provides a notifier, and burunner will automatically detect and use it.
+
+### Creating a Custom Notifier Plugin
+
+#### 1. Implement the Notifier
+
+Create a class that inherits from `BaseNotifier` and implements the `send()` method:
+
+```python
+# my_notifier_pkg/slack.py
+
+from burunner.notifier.base import BaseNotifier, NotifyPayload
+
+
+class SlackNotifier(BaseNotifier):
+    """Slack Webhook notifier."""
+
+    def send(self, payload: NotifyPayload) -> bool:
+        """Send notification. Returns True on success."""
+        import json
+        import urllib.request
+
+        body = {"text": "\n".join(self._build_summary_lines(payload))}
+        try:
+            req = urllib.request.Request(
+                self.webhook_url,
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+```
+
+#### 2. Configure entry_points
+
+In your package's `pyproject.toml`:
+
+```toml
+[project.entry-points."burunner.notifiers"]
+slack = "my_notifier_pkg.slack:SlackNotifier"
+```
+
+Or in `setup.py`:
+
+```python
+setup(
+    name="burunner-slack-notifier",
+    # ...
+    entry_points={
+        "burunner.notifiers": [
+            "slack = my_notifier_pkg.slack:SlackNotifier",
+        ],
+    },
+)
+```
+
+The entry point name (e.g., `slack`) becomes the channel value used in `BURUNNER_NOTIFY_CHANNEL`.
+
+#### 3. Install and Use
+
+```bash
+pip install my-notifier-pkg
+
+# .env
+BURUNNER_NOTIFY_CHANNEL=slack
+BURUNNER_NOTIFY_WEBHOOK=https://hooks.slack.com/services/xxx
+```
+
+burunner will automatically discover and load the `slack` notifier from your package.
