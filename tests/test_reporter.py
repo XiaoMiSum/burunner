@@ -9,11 +9,12 @@ from burunner.reporter.base import BaseReporter
 from burunner.reporter.registry import (
     REPORTER_REGISTRY,
     register_reporter,
-    create_reporter,
+    create_reporter as registry_create_reporter,
 )
+from burunner.reporter.factory import create_reporter, _discover_reporters
 from burunner.parser.models import TestCase, TestStep
 from burunner.runner.result import CaseResult, CaseStatus, SuiteResult
-from burunner.utils.tokens import TokenUsage
+from burunner.utils.metrics import TokenUsage
 
 
 class TestBaseReporter:
@@ -99,7 +100,7 @@ class TestReporterRegistry:
                 pass
 
         register_reporter("mock", MockReporter)
-        reporter = create_reporter("mock", results_dir="./test")
+        reporter = registry_create_reporter("mock", results_dir="./test")
 
         assert isinstance(reporter, MockReporter)
         assert reporter.kwargs == {"results_dir": "./test"}
@@ -107,7 +108,7 @@ class TestReporterRegistry:
     def test_create_reporter_unknown_name(self):
         """创建未知报告器抛出异常。"""
         with pytest.raises(ValueError) as exc_info:
-            create_reporter("unknown")
+            registry_create_reporter("unknown")
 
         assert "未知的报告格式: unknown" in str(exc_info.value)
         assert "可用:" in str(exc_info.value)
@@ -207,3 +208,45 @@ class TestAllureReporterIntegration:
 
         # 不应该抛出异常
         assert True
+
+
+class TestReporterFactory:
+    """报告器工厂（factory.py）测试。"""
+
+    def test_create_reporter_allure(self, tmp_path):
+        """create_reporter('allure') 返回 AllureReporter 实例。"""
+        try:
+            from burunner.reporter.allure_reporter import AllureReporter
+        except ImportError:
+            pytest.skip("allure-commons 未安装")
+
+        reporter = create_reporter(
+            "allure", results_dir=tmp_path / "allure-results")
+        assert reporter is not None
+        assert isinstance(reporter, AllureReporter)
+
+    def test_create_reporter_console(self):
+        """create_reporter('console') 返回 ConsoleReporter 实例。"""
+        from burunner.reporter.console import ConsoleReporter
+
+        reporter = create_reporter("console")
+        assert reporter is not None
+        assert isinstance(reporter, ConsoleReporter)
+
+    def test_create_reporter_unknown_returns_none(self):
+        """create_reporter('unknown') 返回 None。"""
+        result = create_reporter("unknown")
+        assert result is None
+
+    def test_discover_reporters_contains_builtin(self):
+        """_discover_reporters() 包含 'allure' 和 'console'。"""
+        reporters = _discover_reporters()
+        assert "allure" in reporters
+        assert "console" in reporters
+
+    def test_discover_reporters_values_are_subclasses(self):
+        """_discover_reporters() 返回的值都是 BaseReporter 的子类。"""
+        reporters = _discover_reporters()
+        for name, cls in reporters.items():
+            assert issubclass(
+                cls, BaseReporter), f"{name} is not a BaseReporter subclass"

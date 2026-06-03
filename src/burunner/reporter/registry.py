@@ -1,4 +1,10 @@
-"""报告器注册表 —— 支持通过名称创建报告器实例。"""
+"""报告器注册表 —— 支持通过名称创建报告器实例。
+
+.. deprecated::
+    此模块已废弃，请使用 burunner.reporter.factory 中的
+    create_reporter() 和 _discover_reporters()。
+    保留仅用于向后兼容。
+"""
 
 from __future__ import annotations
 

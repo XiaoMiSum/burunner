@@ -18,10 +18,10 @@ from burunner.exceptions import (
 from burunner.parser.models import TestCase
 from burunner.runner.agent_runner import execute_agent
 from burunner.runner.history_parser import HistoryParser
-from burunner.runner.result import CaseResult, CaseStatus
+from burunner.runner.result import CaseResult, CaseStatus, StepOutcome
 from burunner.runner.session_manager import managed_session
 from burunner.runner.verdicts import VerdictJudge
-from burunner.utils.screenshot import capture_failure_screenshot
+from burunner.utils.media import capture_failure_screenshot
 
 logger = logging.getLogger("burunner.executor")
 
@@ -51,6 +51,7 @@ async def run_case(case: TestCase, cfg: RunnerConfig, llm: Any) -> CaseResult:
     error_message: str | None = None
     error_trace: str | None = None
     screenshot_path = None
+    step_outcomes: list[StepOutcome] = []
 
     try:
         async with managed_session(case, cfg) as session:
@@ -82,6 +83,13 @@ async def run_case(case: TestCase, cfg: RunnerConfig, llm: Any) -> CaseResult:
                     logger.debug("截图失败", exc_info=True)
 
             error_message = verdict_error
+
+            # 提取步骤级结果
+            try:
+                step_outcomes = parsed.extract_step_outcomes(case)
+            except Exception:  # noqa: BLE001
+                logger.warning("提取 step_outcomes 失败", exc_info=True)
+                step_outcomes = []
 
     except ConfigurationError as exc:
         error_message = f"配置错误: {exc}"
@@ -141,6 +149,12 @@ async def run_case(case: TestCase, cfg: RunnerConfig, llm: Any) -> CaseResult:
             except Exception:  # noqa: BLE001
                 logger.debug("截图失败", exc_info=True)
 
+        # 异常路径下所有步骤标记 UNKNOWN
+        step_outcomes = [
+            StepOutcome(step_index=i, step_text=s.text, status="UNKNOWN")
+            for i, s in enumerate(case.steps)
+        ]
+
     tokens = parsed.token_usage
     final_text = parsed.final_result_text
 
@@ -155,4 +169,5 @@ async def run_case(case: TestCase, cfg: RunnerConfig, llm: Any) -> CaseResult:
         screenshot_path=screenshot_path,
         started_at=started,
         stopped_at=stopped,
+        step_outcomes=step_outcomes,
     )

@@ -1,24 +1,27 @@
-"""Token 用量统计模块单元测试。"""
+"""Token 用量统计模块单元测试 - 适配 utils.metrics 模块。"""
 
-from burunner.utils.tokens import TokenUsage, usage_from_history, _extract_int
+from burunner.utils.metrics import TokenUsage, usage_from_history, _extract_int
 
 
 class TestTokenUsage:
     """TokenUsage 数据类测试。"""
 
     def test_create_default(self):
+        """测试默认值创建。"""
         usage = TokenUsage()
         assert usage.input_tokens == 0
         assert usage.output_tokens == 0
         assert usage.total == 0
 
     def test_create_with_values(self):
+        """测试指定值创建。"""
         usage = TokenUsage(input_tokens=100, output_tokens=50)
         assert usage.input_tokens == 100
         assert usage.output_tokens == 50
         assert usage.total == 150
 
     def test_add(self):
+        """测试 TokenUsage 相加。"""
         usage1 = TokenUsage(input_tokens=100, output_tokens=50)
         usage2 = TokenUsage(input_tokens=200, output_tokens=100)
         result = usage1 + usage2
@@ -27,6 +30,7 @@ class TestTokenUsage:
         assert result.total == 450
 
     def test_add_does_not_mutate(self):
+        """测试相加不修改原对象。"""
         usage1 = TokenUsage(input_tokens=100, output_tokens=50)
         usage2 = TokenUsage(input_tokens=200, output_tokens=100)
         _ = usage1 + usage2

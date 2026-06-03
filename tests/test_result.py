@@ -4,7 +4,7 @@ import pytest
 
 from burunner.parser.models import TestCase, TestStep
 from burunner.runner.result import CaseResult, CaseStatus, SuiteResult
-from burunner.utils.tokens import TokenUsage
+from burunner.utils.metrics import TokenUsage
 
 
 class TestCaseStatus:
@@ -186,3 +186,58 @@ class TestSuiteResult:
     def test_is_success_empty(self):
         results = SuiteResult()
         assert results.is_success is True
+
+
+class TestStepOutcome:
+    """StepOutcome 数据类测试。"""
+
+    def test_default_values(self):
+        """默认值正确。"""
+        from burunner.runner.result import StepOutcome
+
+        outcome = StepOutcome(step_index=0, step_text="步骤1", status="PASSED")
+        assert outcome.step_index == 0
+        assert outcome.step_text == "步骤1"
+        assert outcome.status == "PASSED"
+        assert outcome.duration == 0.0
+        assert outcome.started_at == 0.0
+        assert outcome.stopped_at == 0.0
+        assert outcome.iterations == 0
+        assert outcome.errors == []
+        assert outcome.actions == []
+        assert outcome.url is None
+
+    def test_all_fields(self):
+        """全字段赋值正确。"""
+        from burunner.runner.result import StepOutcome
+
+        outcome = StepOutcome(
+            step_index=2,
+            step_text="输入用户名",
+            status="FAILED",
+            duration=3.5,
+            started_at=1000.0,
+            stopped_at=1003.5,
+            iterations=5,
+            errors=["元素未找到", "超时"],
+            actions=["click", "type"],
+            url="https://example.com/login",
+        )
+        assert outcome.step_index == 2
+        assert outcome.step_text == "输入用户名"
+        assert outcome.status == "FAILED"
+        assert outcome.duration == 3.5
+        assert outcome.started_at == 1000.0
+        assert outcome.stopped_at == 1003.5
+        assert outcome.iterations == 5
+        assert outcome.errors == ["元素未找到", "超时"]
+        assert outcome.actions == ["click", "type"]
+        assert outcome.url == "https://example.com/login"
+
+    def test_status_values(self):
+        """status 可以是 PASSED/FAILED/INCOMPLETE/UNKNOWN。"""
+        from burunner.runner.result import StepOutcome
+
+        for status in ("PASSED", "FAILED", "INCOMPLETE", "UNKNOWN"):
+            outcome = StepOutcome(step_index=0, step_text="x", status=status)
+            assert outcome.status == status

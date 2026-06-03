@@ -111,13 +111,53 @@ run_case() → create_session() → inject_cookies() → Agent.run() → verdict
 | `verdicts.py` | Verdict determination logic: analyzes agent output to produce PASSED/FAILED/INCOMPLETE/ERROR |
 | `result.py` | `CaseResult`, `SuiteResult`, `CaseStatus` data structures |
 | `progress.py` | Real-time progress tracker (terminal output) |
-| `history_parser.py` | Parses browser-use agent history for token usage and step details |
+| `history_parser.py` | Parses browser-use agent history for token usage, step outcomes, and step-level status tracking |
 
 **Key Design Decisions**:
 - Worker Pool pattern (`asyncio.Queue`): tasks distributed on-demand, worker count = min(parallel, case count)
 - Timeout control: `asyncio.wait_for` wraps execution, timeout returns ERROR status
 - Retry mechanism: retries INCOMPLETE and ERROR status, FAILED (business assertion failure) is never retried
 - Exception isolation: a single Worker exception does not affect other Workers
+
+### Step-Level Status Tracking
+
+The `history_parser.py` module implements step-level status tracking via the `extract_step_outcomes()` method. This maps Agent iterations back to user-defined `TestStep` objects, producing a `StepOutcome` for each step.
+
+**`StepOutcome` data model**:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `step_index` | `int` | Zero-based index of the TestStep |
+| `step_text` | `str` | Original step description text |
+| `status` | `str` | `PASSED` / `FAILED` / `INCOMPLETE` |
+| `duration` | `float` | Execution duration in seconds |
+| `errors` | `list[str]` | Error messages (if any) |
+| `actions` | `list[str]` | Browser actions performed |
+| `url` | `str \| None` | Page URL at the end of the step |
+
+**Mapping strategy** (`extract_step_outcomes`):
+
+1. **Primary path**: Use `current_plan_item` from each Agent iteration to map iterations to their corresponding TestStep by index
+2. **Fallback**: If `current_plan_item` is unavailable (missing field or all values are None), iterations are distributed evenly across steps
+3. **Graceful degradation**: If extraction fails entirely, return an empty list — no exception raised, reporting continues with reduced detail
+
+**Data flow**:
+
+```
+Agent.run() → AgentHistory iterations
+    │
+    ▼
+HistoryParser.extract_step_outcomes(steps, history)
+    │
+    ├─ Group iterations by current_plan_item (or evenly distribute)
+    ├─ Compute per-step: status, duration, errors, actions, url
+    │
+    ▼
+list[StepOutcome] → CaseResult.step_outcomes
+    │
+    ▼
+AllureReporter → Per-step Allure steps with real status and timing
+```
 
 ### executor (Executor)
 

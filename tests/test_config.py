@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from burunner.config import RunnerConfig
+from burunner.exceptions import ConfigurationError
 from burunner.parser.models import CookieItem, EnvConfig
 
 
@@ -310,3 +311,77 @@ class TestRunnerConfig:
         assert cfg.results_dir.exists()
         assert cfg.screenshots_dir.exists()
         assert cfg.screenshots_dir == tmp_path / "custom-screenshots"
+
+
+class TestConfigValidation:
+    """RunnerConfig.validate() 测试。"""
+
+    def test_valid_config_passes(self):
+        """合法配置不抛异常。"""
+        cfg = RunnerConfig()
+        cfg.validate()  # 应无异常
+
+    def test_parallel_zero_raises(self):
+        """parallel=0 抛出异常。"""
+        cfg = RunnerConfig()
+        cfg.parallel = 0
+        with pytest.raises(ConfigurationError):
+            cfg.validate()
+
+    def test_parallel_negative_raises(self):
+        """parallel=-1 抛出异常。"""
+        cfg = RunnerConfig()
+        cfg.parallel = -1
+        with pytest.raises(ConfigurationError):
+            cfg.validate()
+
+    def test_retry_negative_raises(self):
+        """retry_count=-1 抛出异常。"""
+        cfg = RunnerConfig()
+        cfg.retry_count = -1
+        with pytest.raises(ConfigurationError):
+            cfg.validate()
+
+    def test_max_steps_negative_raises(self):
+        cfg = RunnerConfig()
+        cfg.max_steps = -1
+        with pytest.raises(ConfigurationError):
+            cfg.validate()
+
+    def test_case_timeout_negative_raises(self):
+        cfg = RunnerConfig()
+        cfg.case_timeout = -1
+        with pytest.raises(ConfigurationError):
+            cfg.validate()
+
+    def test_temperature_out_of_range(self):
+        cfg = RunnerConfig()
+        cfg.llm_temperature = 3.0
+        with pytest.raises(ConfigurationError):
+            cfg.validate()
+
+    def test_temperature_none_is_valid(self):
+        """temperature=None 合法（使用默认）。"""
+        cfg = RunnerConfig()
+        cfg.llm_temperature = None
+        cfg.validate()
+
+
+class TestConfigDescribe:
+    def test_describe_returns_string(self):
+        cfg = RunnerConfig()
+        result = cfg.describe()
+        assert "RunnerConfig:" in result
+        assert "LLM:" in result
+        assert "Browser:" in result
+
+    def test_describe_includes_notify_when_set(self):
+        cfg = RunnerConfig(notify_channel="feishu")
+        result = cfg.describe()
+        assert "Notify:" in result
+        assert "feishu" in result
+
+    def test_describe_excludes_notify_when_none(self):
+        cfg = RunnerConfig(notify_channel=None)
+        result = cfg.describe()
+        assert "Notify:" not in result

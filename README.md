@@ -17,6 +17,7 @@
 - **YAML + 自然语言**描述测试用例，无需编写代码
 - **自带执行引擎**，不依赖 pytest / unittest
 - **AI 驱动**，基于 [browser-use](https://github.com/browser-use/browser-use) 智能浏览器自动化
+- **智能结果判定**，自动从 Agent 输出中解析测试结论
 
 ### 🤖 多 LLM 支持
 支持 **12+ LLM Provider**：
@@ -24,35 +25,39 @@
 - Google (Gemini) / DeepSeek / Ollama
 - Grok / Mistral / 阿里云 DashScope
 - ModelScope / MoonShot / SiliconFlow / IBM Watsonx / Unbound
+- 支持自定义 LLM 端点和 API Key
+- 支持 temperature 调参
 
 ### 🌐 多浏览器支持
 - Chromium / Chrome / Edge 及其各开发通道
 - 支持 Cookie 注入，实现免登录测试
+- 支持用户数据目录持久化
+- 支持有头/无头模式切换
+- 支持 Vision 视觉能力
 
 ### ⚡ 高性能执行
 - **Worker Pool 并发执行**，渐进启动避免资源尖峰
 - **单用例超时控制**，防止用例卡死
-- **自动重试机制**，提升执行稳定性
+- **自动重试机制**，INCOMPLETE/ERROR 状态自动重试
 - 失败自动截图，结合 vision 能力
+- 支持调试模式保留浏览器打开状态
 
 ### 📊 丰富的测试能力
-- **参数化变量与函数** - `${var}` / `${func()}` 动态数据
-- **数据驱动测试** - CSV / JSON / YAML / 内联数据
+- **参数化变量与函数** - `${var}` / `${func()}` 动态数据，支持 12+ 内置函数
+- **数据驱动测试** - CSV / JSON / YAML / 内联数据，支持数据过滤和跳过
 - **多环境配置** - dev / staging / prod 一套用例多环境运行
 - **预设继承** - 公共步骤复用，减少重复
 - **标签过滤** - 灵活筛选测试用例
+- **名称过滤** - 正则表达式匹配用例名
+- **步骤级状态追踪** - 每个测试步骤独立追踪状态、耗时和错误，失败精确定位到具体步骤
 
 ### 📈 完善的报告与通知
-- **Allure 报告** - 标准 allure-results 格式，包含截图、token 用量、步骤详情
+- **Allure 报告** - 标准 allure-results 格式，包含截图、token 用量、步骤级精确状态
+- **步骤级报告** - 每个步骤独立显示 PASSED/FAILED/INCOMPLETE 状态和精确耗时
 - **实时进度** - 动态进度条，支持关闭
 - **通知集成** - 企业微信 / 飞书 / 钉钉自动推送测试结果
 - **Token 统计** - 每个用例耗时与 token 消耗明细
-
-### 🔧 工程化
-- **完整的单元测试** - 458 个测试，93.1% 覆盖率，100% 通过率
-- **分层异常体系** - ConfigurationError / BrowserError / LLMError 等
-- **插件化架构** - 通知器支持 entry_points 扩展
-- **CI/CD 集成** - GitHub Actions 自动化测试与发布
+- **环境信息记录** - provider、model、浏览器、并行度等
 
 ---
 
@@ -329,6 +334,7 @@ open allure-report/index.html
 
 **报告包含**：
 - ✅ 用例通过/失败/异常统计
+- 📋 步骤级状态追踪（每个步骤独立的 PASSED/FAILED/INCOMPLETE 状态和精确耗时）
 - ⏱️ 执行时间、provider、model
 - 🔢 token 用量统计 (input/output/total)
 - 📸 失败截图 + Agent 输出 + traceback

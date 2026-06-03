@@ -20,12 +20,31 @@ Allure 报告包含以下信息：
 - 每个用例的执行时间
 - Provider、model 信息
 - Input / Output / Total tokens 消耗
+- 步骤级状态追踪（每个步骤独立的 PASSED/FAILED/INCOMPLETE 状态和精确耗时）
 - 失败截图
 - Agent 最终输出文本
 - Traceback 附件（异常时）
 - 按 source 文件聚合的 suite 视图
 - Tag 标签视图
 - 环境信息（burunner 版本、运行环境、LLM provider/model、浏览器类型等）
+
+## 步骤级状态追踪
+
+burunner 追踪每个测试步骤的独立执行状态。在 Allure 报告中，每个步骤包含：
+
+- **独立状态** — 每个步骤独立的 PASSED / FAILED / INCOMPLETE 状态
+- **精确耗时** — 每个步骤的精确执行时间
+- **错误定位** — 用例失败时可精确定位到具体哪个步骤出错
+- **动作详情** — 步骤中执行的浏览器操作
+- **URL 追踪** — 每个步骤执行时的页面地址
+
+通过步骤级追踪，你可以快速定位失败的具体步骤，无需翻阅大量日志。
+
+### 工作原理
+
+框架通过 Agent 的 `current_plan_item` 字段将 Agent 迭代映射回用户定义的测试步骤。每次迭代被归类到对应的步骤下，最终聚合为每个步骤的独立执行结果。
+
+> **注意**：如果 `current_plan_item` 映射不可用（如较旧的 browser-use 版本），迭代将均匀分配到各步骤作为回退策略。该功能优雅降级，不影响测试执行。
 
 ## 安装 Allure CLI
 

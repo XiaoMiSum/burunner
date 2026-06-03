@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+from click_option_group import optgroup
 
 from burunner import __version__
 from burunner.config import RunnerConfig
@@ -21,7 +22,7 @@ from burunner.reporter.console import print_case_line, print_summary
 from burunner.runner.orchestrator import run_suite
 from burunner.runner.progress import ProgressTracker
 from burunner.runner.result import CaseResult, CaseStatus
-from burunner.utils.logger import setup_logging
+from burunner.utils.logging import setup_logging
 
 
 @click.group(help="基于 browser-use 的自然语言浏览器测试框架")
@@ -32,42 +33,48 @@ def main() -> None:
 
 @main.command("run", help="执行一个或多个 YAML 测试文件")
 @click.argument("paths", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False))
-@click.option("-k", "--filter", "filter_", default=None, help="正则匹配用例 name")
-@click.option("-t", "--tags", "tags", default=None, help="按标签过滤用例，多个标签用逗号分隔（OR 关系）")
-@click.option("-p", "--parallel", default=None, type=int, help="并行度，默认 1")
-@click.option(
+@optgroup.group("LLM Configuration", help="大语言模型相关配置")
+@optgroup.option(
     "--llm",
     "llm_provider",
     default=None,
     type=click.Choice(list(SUPPORTED_PROVIDERS), case_sensitive=False),
     help="LLM provider，默认从 .env 读取",
 )
-@click.option("--model", "llm_model", default=None, help="LLM model name，如 gpt-4o")
-@click.option("--temperature", "llm_temperature", default=None, type=float, help="采样温度")
-@click.option("--base-url", "llm_base_url", default=None, help="自定义 LLM endpoint")
-@click.option("--api-key", "llm_api_key", default=None, help="LLM API key（覆盖环境变量）")
-@click.option("--headless/--headed", default=None, help="是否无头模式（默认 headless）")
-@click.option(
+@optgroup.option("--model", "llm_model", default=None, help="LLM model name，如 gpt-4o")
+@optgroup.option("--temperature", "llm_temperature", default=None, type=click.FloatRange(min=0.0, max=2.0), help="采样温度")
+@optgroup.option("--base-url", "llm_base_url", default=None, help="自定义 LLM endpoint")
+@optgroup.option("--api-key", "llm_api_key", default=None, help="LLM API key（覆盖环境变量）")
+@optgroup.group("Browser Configuration", help="浏览器相关配置")
+@optgroup.option("--headless/--headed", default=None, help="是否无头模式（默认 headless）")
+@optgroup.option(
     "--browser", "browser_channel",
     default=None,
     type=click.Choice(list(SUPPORTED_BROWSER_CHANNELS), case_sensitive=False),
     help="浏览器类型（默认 chromium）",
 )
-@click.option("--max-steps", default=None, type=int, help="单个用例最大 Agent 步数")
-@click.option("--case-timeout", default=None, type=int, help="单用例超时秒数（0=不限，默认不限）")
-@click.option("--retry", "retry_count", default=None, type=int, help="异常用例自动重试次数（默认 0）")
-@click.option(
+@optgroup.option("--keep-browser-open", is_flag=True, default=False, help="调试用：用例后保留浏览器")
+@optgroup.group("Execution Strategy", help="执行策略配置")
+@optgroup.option("-p", "--parallel", default=None, type=click.IntRange(min=1), help="并行度，默认 1")
+@optgroup.option("--max-steps", default=None, type=click.IntRange(min=0), help="单个用例最大 Agent 步数")
+@optgroup.option("--case-timeout", default=None, type=click.IntRange(min=0), help="单用例超时秒数（0=不限，默认不限）")
+@optgroup.option("--retry", "retry_count", default=None, type=click.IntRange(min=0), help="异常用例自动重试次数（默认 0）")
+@optgroup.group("Output & Reporting", help="输出与报告配置")
+@optgroup.option(
     "--results-dir",
     default=None,
     type=click.Path(file_okay=False),
     help="Allure 结果目录，默认 ./allure-results",
 )
-@click.option("--keep-browser-open", is_flag=True, default=False, help="调试用：用例后保留浏览器")
-@click.option("--no-vision", is_flag=True, default=False, help="禁用 use_vision")
-@click.option("--no-progress", is_flag=True, default=False, help="关闭实时进度显示")
-@click.option("-e", "--env", "env_name", default=None, help="运行环境（对应 YAML 中 environments 定义）")
-@click.option("-v", "--verbose", is_flag=True, default=False)
-@click.option("--browser-use-log", is_flag=True, default=False, help="打印 browser-use 执行日志（默认关闭）")
+@optgroup.option("--no-vision", is_flag=True, default=False, help="禁用 use_vision")
+@optgroup.option("--no-progress", is_flag=True, default=False, help="关闭实时进度显示")
+@optgroup.option("-v", "--verbose", is_flag=True, default=False)
+@optgroup.group("Environment", help="运行环境配置")
+@optgroup.option("-e", "--env", "env_name", default=None, help="运行环境（对应 YAML 中 environments 定义）")
+@optgroup.option("--browser-use-log", is_flag=True, default=False, help="打印 browser-use 执行日志（默认关闭）")
+@optgroup.group("Filter", help="用例过滤配置")
+@optgroup.option("-k", "--filter", "filter_", default=None, help="正则匹配用例 name")
+@optgroup.option("-t", "--tags", "tags", default=None, help="按标签过滤用例，多个标签用逗号分隔（OR 关系）")
 def run_cmd(
     paths: tuple[str, ...],
     filter_: str | None,
@@ -135,6 +142,7 @@ def run_cmd(
         browser_use_log=browser_use_log or None,
     )
     cfg.source_files = [Path(p) for p in paths]
+    cfg.validate()
     cfg.ensure_dirs()
 
     click.echo(

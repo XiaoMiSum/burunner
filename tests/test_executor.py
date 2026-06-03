@@ -274,3 +274,128 @@ class TestRunCase:
 
                             assert result.status == CaseStatus.PASSED
                             mock_screenshot.assert_not_called()
+
+
+class TestRunCaseStepOutcomes:
+    """run_case 步骤级结果提取测试。"""
+
+    @pytest.mark.asyncio
+    async def test_run_case_extracts_step_outcomes(self):
+        """测试成功执行时提取 step_outcomes。"""
+        from burunner.runner.result import StepOutcome
+
+        case = TestCase(
+            name="测试用例",
+            steps=[
+                TestStep(text="步骤1"),
+                TestStep(text="步骤2"),
+            ]
+        )
+        cfg = RunnerConfig()
+        mock_llm = MagicMock()
+        mock_history = MagicMock()
+
+        with patch("burunner.runner.executor.managed_session") as mock_session_ctx:
+            mock_session = MagicMock()
+            mock_session_ctx.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session)
+            mock_session_ctx.return_value.__aexit__ = AsyncMock(
+                return_value=False)
+
+            with patch("burunner.runner.executor.execute_agent", new_callable=AsyncMock) as mock_execute:
+                mock_execute.return_value = mock_history
+
+                with patch("burunner.runner.executor.HistoryParser") as mock_parser_cls:
+                    mock_parser = MagicMock()
+                    mock_parser.final_result_text = '{"success": true}'
+                    mock_parser.is_done = True
+                    mock_parser.total_steps = 5
+                    mock_parser.extract_step_outcomes.return_value = [
+                        StepOutcome(step_index=0, step_text="步骤1",
+                                    status="PASSED"),
+                        StepOutcome(step_index=1, step_text="步骤2",
+                                    status="PASSED"),
+                    ]
+                    mock_parser_cls.return_value = mock_parser
+
+                    with patch("burunner.runner.executor.VerdictJudge") as mock_judge_cls:
+                        mock_judge = MagicMock()
+                        mock_judge.judge.return_value = (
+                            CaseStatus.PASSED, None)
+                        mock_judge_cls.return_value = mock_judge
+
+                        result = await run_case(case, cfg, mock_llm)
+
+                        assert result.status == CaseStatus.PASSED
+                        assert len(result.step_outcomes) == 2
+                        assert result.step_outcomes[0].status == "PASSED"
+                        assert result.step_outcomes[1].status == "PASSED"
+
+    @pytest.mark.asyncio
+    async def test_run_case_step_outcomes_extraction_failure(self):
+        """测试 step_outcomes 提取失败时返回空列表。"""
+        case = TestCase(
+            name="测试用例",
+            steps=[TestStep(text="步骤1")]
+        )
+        cfg = RunnerConfig()
+        mock_llm = MagicMock()
+        mock_history = MagicMock()
+
+        with patch("burunner.runner.executor.managed_session") as mock_session_ctx:
+            mock_session = MagicMock()
+            mock_session_ctx.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session)
+            mock_session_ctx.return_value.__aexit__ = AsyncMock(
+                return_value=False)
+
+            with patch("burunner.runner.executor.execute_agent", new_callable=AsyncMock) as mock_execute:
+                mock_execute.return_value = mock_history
+
+                with patch("burunner.runner.executor.HistoryParser") as mock_parser_cls:
+                    mock_parser = MagicMock()
+                    mock_parser.final_result_text = '{"success": true}'
+                    mock_parser.is_done = True
+                    mock_parser.total_steps = 5
+                    mock_parser.extract_step_outcomes.side_effect = RuntimeError(
+                        "提取失败")
+                    mock_parser_cls.return_value = mock_parser
+
+                    with patch("burunner.runner.executor.VerdictJudge") as mock_judge_cls:
+                        mock_judge = MagicMock()
+                        mock_judge.judge.return_value = (
+                            CaseStatus.PASSED, None)
+                        mock_judge_cls.return_value = mock_judge
+
+                        result = await run_case(case, cfg, mock_llm)
+
+                        assert result.status == CaseStatus.PASSED
+                        assert result.step_outcomes == []
+
+    @pytest.mark.asyncio
+    async def test_run_case_error_path_step_outcomes(self):
+        """测试异常路径下所有步骤标记为 UNKNOWN。"""
+        case = TestCase(
+            name="测试用例",
+            steps=[
+                TestStep(text="步骤1"),
+                TestStep(text="步骤2"),
+            ]
+        )
+        cfg = RunnerConfig()
+        mock_llm = MagicMock()
+
+        with patch("burunner.runner.executor.managed_session") as mock_session_ctx:
+            mock_session_ctx.return_value.__aenter__ = AsyncMock(
+                side_effect=BrowserError("浏览器崩溃"))
+            mock_session_ctx.return_value.__aexit__ = AsyncMock(
+                return_value=False)
+
+            result = await run_case(case, cfg, mock_llm)
+
+            assert result.status == CaseStatus.ERROR
+            assert len(result.step_outcomes) == 2
+            assert result.step_outcomes[0].status == "UNKNOWN"
+            assert result.step_outcomes[1].status == "UNKNOWN"
+            assert result.step_outcomes[0].step_text == "步骤1"
+            assert result.step_outcomes[1].step_text == "步骤2"

@@ -46,14 +46,18 @@ def usage_from_history(history: Any) -> TokenUsage:
     # 形态 1: history.usage
     usage = getattr(history, "usage", None)
     if usage is not None:
-        in_tok = _extract_int(usage, "total_prompt_tokens", "prompt_tokens", "input_tokens")
-        out_tok = _extract_int(usage, "total_completion_tokens", "completion_tokens", "output_tokens")
+        in_tok = _extract_int(usage, "total_prompt_tokens",
+                              "prompt_tokens", "input_tokens")
+        out_tok = _extract_int(
+            usage, "total_completion_tokens", "completion_tokens", "output_tokens")
         if in_tok is not None or out_tok is not None:
             return TokenUsage(input_tokens=in_tok or 0, output_tokens=out_tok or 0)
 
     # 形态 2: 平铺属性
-    in_tok = _extract_int(history, "total_input_tokens", "input_tokens", "prompt_tokens")
-    out_tok = _extract_int(history, "total_output_tokens", "output_tokens", "completion_tokens")
+    in_tok = _extract_int(history, "total_input_tokens",
+                          "input_tokens", "prompt_tokens")
+    out_tok = _extract_int(history, "total_output_tokens",
+                           "output_tokens", "completion_tokens")
     if in_tok is not None or out_tok is not None:
         return TokenUsage(input_tokens=in_tok or 0, output_tokens=out_tok or 0)
 

@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 
 from burunner.parser.models import TestCase
-from burunner.utils.tokens import TokenUsage
+from burunner.utils.metrics import TokenUsage
 
 
 class CaseStatus(str, Enum):
@@ -28,6 +28,22 @@ class CaseStatus(str, Enum):
 
 
 @dataclass
+class StepOutcome:
+    """单个测试步骤的执行结果。"""
+
+    step_index: int                     # 对应 TestCase.steps 的索引
+    step_text: str                      # 步骤描述文本
+    status: str                         # PASSED / FAILED / INCOMPLETE / UNKNOWN
+    duration: float = 0.0               # 该步骤的总耗时（秒）
+    started_at: float = 0.0             # 开始时间戳
+    stopped_at: float = 0.0             # 结束时间戳
+    iterations: int = 0                 # 该步骤占用的 Agent 迭代数
+    errors: list[str] = field(default_factory=list)  # 该步骤期间的错误信息
+    actions: list[str] = field(default_factory=list)  # 执行的动作名称列表
+    url: str | None = None              # 该步骤结束时的页面 URL
+
+
+@dataclass
 class CaseResult:
     case: TestCase
     status: CaseStatus
@@ -39,8 +55,8 @@ class CaseResult:
     screenshot_path: Path | None = None
     started_at: float = 0.0               # epoch ms
     stopped_at: float = 0.0               # epoch ms
-    step_outcomes: list[dict] = field(
-        default_factory=list)  # 每步 status/desc，可选
+    step_outcomes: list[StepOutcome] = field(
+        default_factory=list)  # 每步执行结果，可选
 
 
 @dataclass

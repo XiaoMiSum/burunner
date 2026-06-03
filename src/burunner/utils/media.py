@@ -34,7 +34,8 @@ def _decode_b64(data: str) -> bytes | None:
 async def _from_session(session: Any) -> bytes | None:
     if session is None:
         return None
-    method = getattr(session, "take_screenshot", None) or getattr(session, "screenshot", None)
+    method = getattr(session, "take_screenshot", None) or getattr(
+        session, "screenshot", None)
     if method is None:
         return None
     try:
@@ -96,7 +97,8 @@ async def capture_failure_screenshot(
     if png is None:
         return None
 
-    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in case_name)[:80]
+    safe = "".join(ch if ch.isalnum() or ch in (
+        "-", "_") else "_" for ch in case_name)[:80]
     path = output_dir / f"{safe}-{int(time.time() * 1000)}.png"
     path.write_bytes(png)
     return path

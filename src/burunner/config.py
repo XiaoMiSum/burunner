@@ -206,6 +206,47 @@ class RunnerConfig:
             return replace(self, **kwargs)
         return self
 
+    def describe(self) -> str:
+        """返回当前生效配置的摘要字符串（用于日志和调试）。"""
+        lines = [
+            "RunnerConfig:",
+            f"  LLM: provider={self.llm_provider}, model={self.llm_model}, temperature={self.llm_temperature}",
+            f"  Browser: headless={self.headless}, channel={self.browser_channel}",
+            f"  Execution: parallel={self.parallel}, max_steps={self.max_steps},"
+            f" timeout={self.case_timeout}, retry={self.retry_count}",
+            f"  Output: results_dir={self.results_dir}",
+        ]
+        if self.notify_channel:
+            lines.append(f"  Notify: channel={self.notify_channel}")
+        return "\n".join(lines)
+
+    def validate(self) -> None:
+        """校验配置值合法性，不合法则抛出 ConfigurationError。"""
+        from burunner.exceptions import ConfigurationError
+
+        if self.llm_temperature is not None and (
+            self.llm_temperature < 0.0 or self.llm_temperature > 2.0
+        ):
+            raise ConfigurationError(
+                f"temperature 必须在 0.0~2.0 之间，当前值: {self.llm_temperature}"
+            )
+        if self.parallel < 1:
+            raise ConfigurationError(
+                f"parallel 必须 >= 1，当前值: {self.parallel}"
+            )
+        if self.max_steps < 0:
+            raise ConfigurationError(
+                f"max-steps 不能为负数，当前值: {self.max_steps}"
+            )
+        if self.case_timeout < 0:
+            raise ConfigurationError(
+                f"case-timeout 不能为负数，当前值: {self.case_timeout}"
+            )
+        if self.retry_count < 0:
+            raise ConfigurationError(
+                f"retry 不能为负数，当前值: {self.retry_count}"
+            )
+
     def ensure_dirs(self) -> None:
         self.results_dir.mkdir(parents=True, exist_ok=True)
         if self.screenshots_dir is None:

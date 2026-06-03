@@ -21,10 +21,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent 最大步骤数支持动态计算（测试步骤数 × 20），可通过 `BURUNNER_MAX_STEPS` 环境变量覆盖
 - Mako 模板安全沙箱：输入预检 + 运行时隔离，阻止任意代码执行
 - **完整的单元测试体系**
-  - 23 个测试文件,458 个测试用例
-  - 模块覆盖率 93.1% (27/29)
-  - 测试通过率 100% (456 passed, 0 failed)
-  - 核心功能 100% 覆盖 (Parser/Runner/Notifier/Utils/Browser/LLM)
+  - 27 个测试文件,550 个测试用例
+  - 代码覆盖率 79% (行覆盖), 77% (分支覆盖)
+  - 测试通过率 100% (544 passed, 6 skipped)
+  - 18 个模块达到 100% 覆盖率
+
+#### Utils 模块拆分
+
+- `utils/logging.py` - 日志管理模块（100% 覆盖）
+- `utils/media.py` - 截图处理模块（99% 覆盖）
+- `utils/metrics.py` - Token 统计模块（100% 覆盖）
+
+#### 配置管理增强
+
+- `RunnerConfig.validate()` - 配置参数合法性校验
+  - temperature 范围校验 (0.0~2.0)
+  - parallel 最小值校验 (>= 1)
+  - max_steps/case_timeout/retry_count 非负校验
+- `RunnerConfig.describe()` - 配置摘要输出
+- `RunnerConfig.ensure_dirs()` - 目录创建幂等性保证
+
+#### 报告器插件化
+
+- `reporter/factory.py` - 报告器插件发现机制
+  - 内置报告器：allure, console
+  - 外部插件支持：`entry_points(group="burunner.reporters")`
+  - 动态加载与容错处理
+- `reporter/registry.py` - 报告器注册表（100% 覆盖）
+
+#### 步骤级结果追踪
+
+- `StepOutcome` 数据结构 - 记录每个测试步骤的执行结果
+  - step_index, step_text, status
+  - duration, started_at, stopped_at
+  - iterations, errors, actions, url
+- `executor.py` 增强 - 提取步骤级执行结果
+  - 正常路径：从 HistoryParser 提取
+  - 异常路径：所有步骤标记为 UNKNOWN
+  - 容错处理：提取失败返回空列表
 
 ### Changed
 
@@ -38,11 +72,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 执行结果判定逻辑优化为 5 级优先级判定链
 - `NotifyPayload` 增加 `incomplete` 字段，统计行显示未完成用例数
 
+#### 架构优化
+
+- **Utils 模块化**：从单一文件拆分为 logging/media/metrics 三个子模块
+- **配置管理集中化**：新增 validate/describe 方法，增强配置安全性
+- **报告器插件化**：支持外部插件动态发现和加载
+- **步骤追踪精细化**：从用例级细化到步骤级结果记录
+- **测试架构升级**：
+  - 适配最新模块拆分（utils/*）
+  - 新增配置校验测试（21个用例）
+  - 新增报告器工厂测试（10个用例）
+  - 新增 StepOutcome 测试（3个用例）
+  - 测试文档覆盖率 84.4%
+
 ### Fixed
 
 - 修复 Mako 模板 `${...}` 表达式存在的任意代码执行安全漏洞
 - 修复 browser-use 日志在非 verbose 模式下仍然输出大量信息的问题
 - 修复浏览器会话在异常时可能泄露的资源管理问题（改用 async context manager）
+
+#### 测试修复
+
+- 修复测试导入路径，适配 utils 模块拆分
+- 修复 StepOutcome 提取失败时的容错处理
+- 修复配置校验边界条件测试
 
 ## [0.1.0] - 2026-05-30
 

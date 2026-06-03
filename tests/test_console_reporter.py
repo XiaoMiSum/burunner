@@ -13,7 +13,7 @@ from burunner.reporter.console import (
 )
 from burunner.parser.models import TestCase, TestStep
 from burunner.runner.result import CaseResult, CaseStatus, SuiteResult
-from burunner.utils.tokens import TokenUsage
+from burunner.utils.metrics import TokenUsage
 
 
 class TestColor:

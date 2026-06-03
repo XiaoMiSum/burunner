@@ -5,12 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 import uuid
 from pathlib import Path
 from typing import Any
 
-from burunner.parser.models import TestCase
 from burunner.reporter.base import BaseReporter
 from burunner.runner.result import CaseResult, CaseStatus
 
@@ -132,19 +130,37 @@ class AllureReporter(BaseReporter):
         StepResult = getattr(self._model2, "TestStepResult", None) or getattr(
             self._model2, "StepResult"
         )
-        # 简单策略：所有步骤共享 case 的最终状态；失败时无法精确定位某一步，
-        # 故第一步起均为 passed，最后一步反映 case 结果（更接近真实展示）。
-        for idx, s in enumerate(case.steps):
-            step_status = self._status("passed")
-            if status_name in ("failed", "broken") and idx == len(case.steps) - 1:
-                step_status = status
-            step = StepResult(
-                name=f"{idx + 1}. {s.text}",
-                status=step_status,
-                start=int(result.started_at),
-                stop=int(result.stopped_at),
-            )
-            steps.append(step)
+        if result.step_outcomes:
+            # 使用真实步骤级数据
+            for outcome in result.step_outcomes:
+                if outcome.status == "PASSED":
+                    step_status = self._status("passed")
+                elif outcome.status == "FAILED":
+                    step_status = self._status("failed")
+                else:
+                    step_status = self._status("broken")
+                step = StepResult(
+                    name=f"{outcome.step_index + 1}. {outcome.step_text}",
+                    status=step_status,
+                    start=int(
+                        outcome.started_at * 1000) if outcome.started_at else int(result.started_at),
+                    stop=int(
+                        outcome.stopped_at * 1000) if outcome.stopped_at else int(result.stopped_at),
+                )
+                steps.append(step)
+        else:
+            # 回退逻辑：所有步骤共享 case 的最终状态
+            for idx, s in enumerate(case.steps):
+                step_status = self._status("passed")
+                if status_name in ("failed", "broken") and idx == len(case.steps) - 1:
+                    step_status = status
+                step = StepResult(
+                    name=f"{idx + 1}. {s.text}",
+                    status=step_status,
+                    start=int(result.started_at),
+                    stop=int(result.stopped_at),
+                )
+                steps.append(step)
 
         attachments = []
         if result.final_result:

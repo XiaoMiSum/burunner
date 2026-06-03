@@ -1,4 +1,4 @@
-"""截图工具模块单元测试。"""
+"""截图工具模块单元测试 - 适配 utils.media 模块。"""
 
 import asyncio
 from pathlib import Path
@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from burunner.utils.screenshot import (
+from burunner.utils.media import (
     _decode_b64,
     _from_session,
     _from_history,
@@ -18,12 +18,15 @@ class TestDecodeB64:
     """_decode_b64 函数测试。"""
 
     def test_empty_string(self):
+        """测试空字符串返回 None。"""
         assert _decode_b64("") is None
 
     def test_none_string(self):
+        """测试 None 输入返回 None。"""
         assert _decode_b64(None) is None
 
     def test_valid_base64(self):
+        """测试有效 base64 解码。"""
         import base64
         original = b"test image data"
         encoded = base64.b64encode(original).decode()
@@ -31,6 +34,7 @@ class TestDecodeB64:
         assert result == original
 
     def test_base64_with_data_prefix(self):
+        """测试带 data URI 前缀的 base64。"""
         import base64
         original = b"test image"
         encoded = base64.b64encode(original).decode()
@@ -39,6 +43,7 @@ class TestDecodeB64:
         assert result == original
 
     def test_invalid_base64(self):
+        """测试无效 base64 返回 None。"""
         result = _decode_b64("!!!invalid!!!")
         assert result is None
 

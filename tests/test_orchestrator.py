@@ -14,7 +14,7 @@ from burunner.runner.orchestrator import (
     _run_with_retry,
 )
 from burunner.runner.result import CaseResult, CaseStatus
-from burunner.utils.tokens import TokenUsage
+from burunner.utils.metrics import TokenUsage
 
 
 class TestMaybeAwait:

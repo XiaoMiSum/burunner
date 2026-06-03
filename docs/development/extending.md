@@ -1,6 +1,6 @@
 # Extending Guide
 
-This document explains how to extend the burunner framework, including adding new LLM Providers, notification channels, data source types, and custom browser drivers.
+This document explains how to extend the burunner framework, including adding new LLM Providers, notification channels, variable functions, data source types, and custom browser drivers.
 
 ---
 
@@ -284,6 +284,204 @@ This means external plugins can also **override** built-in notifiers by using th
 | `status_text` | `str` (property) | Status text (✅/❌) |
 | `elapsed_text` | `str` (property) | Formatted elapsed time |
 
+### Best Practices
+
+- **Naming**: Notifier class names should use PascalCase (e.g., `SlackNotifier`, `TelegramNotifier`)
+- **webhook_url**: Obtained automatically by `BaseNotifier.__init__()` from the framework configuration — no manual parsing needed
+- **Error Handling**: `send()` must return `True` on success and `False` on failure. Never raise exceptions — the framework will not abort test execution due to notification failures
+- **Logging**: Use `logging.getLogger("burunner.notifier.<channel>")` for consistent log output
+- **Timeout**: Set appropriate timeouts for HTTP requests (recommended: 10 seconds) to avoid blocking the main process
+- **Content Building**: Reuse `self._build_summary_lines(payload)` to produce standardized Markdown content; customize formatting only when the target platform requires it
+
+---
+
+## Extending Variable Functions
+
+burunner's variable system is powered by the [Mako template engine](https://www.makotemplates.org/) and exposes a `VariableRegistry` for registering custom functions. All `${...}` expressions in YAML test steps are resolved through this system.
+
+### Built-in Functions
+
+| Function | Signature | Description | Example |
+| --- | --- | --- | --- |
+| `timestamp` | `timestamp()` | Current Unix timestamp (seconds) | `${timestamp()}` → `1717401600` |
+| `date` | `date()` | Current date in YYYY-MM-DD | `${date()}` → `2026-06-03` |
+| `datetime` | `datetime()` | Current datetime YYYY-MM-DD HH:MM:SS | `${datetime()}` → `2026-06-03 14:30:00` |
+| `utc_datetime` | `utc_datetime()` | Current UTC datetime | `${utc_datetime()}` → `2026-06-03 06:30:00` |
+| `random_int` | `random_int([min], [max])` | Random integer (default 0–9999) | `${random_int(100, 999)}` → `427` |
+| `random_string` | `random_string([length])` | Random alphanumeric string (default length 8) | `${random_string(12)}` → `aB3kQ9xMp2Yz` |
+| `uuid` | `uuid()` | UUID4 string | `${uuid()}` → `a1b2c3d4-...` |
+| `env` | `env(NAME[, default])` | Read environment variable | `${env('HOME')}` → `/Users/me` |
+| `calc` | `calc(expression)` | Safe math evaluation (+, -, *, /, %, **) | `${calc('2 ** 10')}` → `1024` |
+
+### Extension Approach A: Global Registration
+
+Register functions on the global `_default_registry` instance so they are available in all test cases:
+
+```python
+# my_burunner_extensions/functions.py
+
+from burunner.parser.variables import _default_registry
+
+
+@_default_registry.register("phone")
+def _fn_phone(prefix="138"):
+    """Generate a random Chinese mobile number."""
+    import random
+    suffix = "".join([str(random.randint(0, 9)) for _ in range(8)])
+    return f"{prefix}{suffix}"
+
+
+@_default_registry.register("test_email")
+def _fn_test_email(name=None):
+    """Generate a test email address."""
+    import random, string
+    if name is None:
+        name = "".join(random.choices(string.ascii_lowercase, k=6))
+    return f"{name}@test.example.com"
+```
+
+Usage in YAML:
+
+```yaml
+steps:
+  - Enter phone number ${phone()}
+  - Enter phone number ${phone('159')}
+  - Enter email ${test_email()}
+  - Enter email ${test_email('alice')}
+```
+
+> **Note**: The extension module must be imported before tests run. You can add an `import` in a `conftest.py` or a startup hook.
+
+### Extension Approach B: Passing Custom Functions via `resolve_text`
+
+For isolated or test-specific functions, pass them directly to `resolve_text()`:
+
+```python
+from burunner.parser.variables import resolve_text
+
+custom_functions = {
+    "order_id": lambda: f"ORD-{__import__('time').strftime('%Y%m%d%H%M%S')}",
+    "greet": lambda name: f"Hello, {name}!",
+}
+
+result = resolve_text("${greet('World')} Order: ${order_id()}", custom_functions=custom_functions)
+# => "Hello, World! Order: ORD-20260603143000"
+```
+
+> **Note**: Functions passed via `custom_functions` can override built-in functions of the same name.
+
+### Extension Approach C: Standalone VariableRegistry Instance
+
+For library or plugin authors who want isolated registries:
+
+```python
+from burunner.parser.variables import VariableRegistry
+
+my_registry = VariableRegistry()
+
+
+@my_registry.register("my_func")
+def _fn_my_func(arg1, arg2="default"):
+    return f"{arg1}_{arg2}"
+
+
+# Use with resolve_text via custom_functions
+from burunner.parser.variables import resolve_text
+
+result = resolve_text(
+    "${my_func('hello', 'world')}",
+    custom_functions=my_registry._functions,
+)
+# => "hello_world"
+```
+
+### Security Constraints
+
+The variable system enforces a strict sandbox:
+
+| Constraint | Detail |
+| --- | --- |
+| `__builtins__` cleared | All Python built-ins are removed from the template context |
+| Forbidden names blocked | `__import__`, `eval`, `exec`, `compile`, `open`, `getattr`, `setattr`, `globals`, `locals`, `breakpoint`, etc. |
+| Pre-render validation | `${...}` expressions are scanned for dangerous patterns before rendering |
+| Only registered functions available | Only functions explicitly injected into the context can be called |
+| Simple types recommended | Function parameters and return values should be simple types (`str`, `int`, `float`) |
+
+> **Warning**: Even though `<%...%>` control blocks are escaped, `${...}` expressions can still execute arbitrary Python code if dangerous functions are injected. Always restrict your registry to safe, side-effect-free functions.
+
+### Complete Example: Test Data Generator Plugin
+
+Below is a full example of creating a reusable custom functions package for generating test data:
+
+```python
+# my_burunner_testdata/__init__.py
+
+"""Test data generation functions for burunner."""
+
+import random
+import string
+
+from burunner.parser.variables import _default_registry
+
+
+@_default_registry.register("phone")
+def _fn_phone(prefix="138"):
+    """Generate a random mobile phone number."""
+    suffix = "".join([str(random.randint(0, 9)) for _ in range(8)])
+    return f"{prefix}{suffix}"
+
+
+@_default_registry.register("test_email")
+def _fn_test_email(name=None):
+    """Generate a test email address."""
+    if name is None:
+        name = "".join(random.choices(string.ascii_lowercase, k=6))
+    return f"{name}@test.example.com"
+
+
+@_default_registry.register("id_card")
+def _fn_id_card():
+    """Generate a random 18-digit ID card number (for testing only)."""
+    area = str(random.randint(110000, 659999))
+    year = str(random.randint(1970, 2005))
+    month = f"{random.randint(1, 12):02d}"
+    day = f"{random.randint(1, 28):02d}"
+    seq = f"{random.randint(1, 999):03d}"
+    base = f"{area}{year}{month}{day}{seq}"
+    # Simplified check digit
+    check = str(random.randint(0, 9))
+    return f"{base}{check}"
+
+
+@_default_registry.register("company_name")
+def _fn_company_name():
+    """Generate a random company name for testing."""
+    prefixes = ["Acme", "Global", "Tech", "Smart", "Cloud"]
+    suffixes = ["Corp", "Inc", "Ltd", "Solutions", "Systems"]
+    return f"{random.choice(prefixes)} {random.choice(suffixes)}"
+```
+
+Usage in test YAML:
+
+```yaml
+cases:
+  - name: User registration test
+    steps:
+      - Navigate to registration page
+      - Enter phone ${phone()}
+      - Enter email ${test_email()}
+      - Enter ID ${id_card()}
+      - Enter company ${company_name()}
+      - Click submit
+```
+
+To use this package, ensure it is imported at startup:
+
+```python
+# conftest.py or startup script
+import my_burunner_testdata  # noqa: F401 — triggers registration
+```
+
 ---
 
 ## Adding a New Data Source Type
@@ -442,6 +640,7 @@ Design principles for burunner extension points:
 | --- | --- | --- |
 | LLM Provider | Registry + Strategy | `ProviderSpec` + `PROVIDER_REGISTRY` |
 | Notification Channel | Factory + Inheritance + entry_points | `BaseNotifier.send()` + `NOTIFIER_REGISTRY` / `entry_points` |
+| Variable Functions | Registry + Mako sandbox | `VariableRegistry` + `_default_registry` |
 | Data Source | Suffix matching + loader function | `resolve_data_source()` |
 | Browser Driver | Parameter extension | `create_session()` |
 | Reporter | Registry + Inheritance | `BaseReporter` + `REPORTER_REGISTRY` |

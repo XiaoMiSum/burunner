@@ -1,6 +1,6 @@
 # 扩展开发指南
 
-本文档介绍如何扩展 burunner 框架，包括新增 LLM Provider、通知渠道、数据源类型和自定义浏览器驱动。
+本文档介绍如何扩展 burunner 框架，包括新增 LLM Provider、通知渠道、变量函数、数据源类型和自定义浏览器驱动。
 
 ---
 
@@ -292,6 +292,204 @@ burunner 启动时，`factory.py` 中的 `_discover_notifiers()` 会：
 | `status_text` | `str`（property） | 状态文本（✅/❌） |
 | `elapsed_text` | `str`（property） | 格式化耗时 |
 
+### 开发注意事项
+
+- **命名规范**：通知器类名使用 PascalCase（如 `SlackNotifier`、`TelegramNotifier`）
+- **webhook_url**：由 `BaseNotifier.__init__()` 自动从框架配置中获取，无需手动解析
+- **异常处理**：`send()` 必须返回 `True`（成功）或 `False`（失败），不可抛出异常——框架不会因通知发送失败而中断测试执行
+- **日志输出**：使用 `logging.getLogger("burunner.notifier.<channel>")` 保持日志格式一致
+- **超时设置**：HTTP 请求应设置合理超时（建议 10 秒），避免阻塞主流程
+- **内容构建**：复用 `self._build_summary_lines(payload)` 生成标准 Markdown 格式内容；仅在目标平台有特殊要求时自定义格式
+
+---
+
+## 变量函数扩展
+
+burunner 的变量系统基于 [Mako 模板引擎](https://www.makotemplates.org/)，通过 `VariableRegistry` 注册自定义函数。YAML 测试步骤中所有 `${...}` 表达式均通过此系统解析。
+
+### 内置函数列表
+
+| 函数 | 签名 | 说明 | 示例 |
+| --- | --- | --- | --- |
+| `timestamp` | `timestamp()` | 当前 Unix 时间戳（秒） | `${timestamp()}` → `1717401600` |
+| `date` | `date()` | 当前日期 YYYY-MM-DD | `${date()}` → `2026-06-03` |
+| `datetime` | `datetime()` | 当前日期时间 YYYY-MM-DD HH:MM:SS | `${datetime()}` → `2026-06-03 14:30:00` |
+| `utc_datetime` | `utc_datetime()` | 当前 UTC 日期时间 | `${utc_datetime()}` → `2026-06-03 06:30:00` |
+| `random_int` | `random_int([min], [max])` | 随机整数（默认 0–9999） | `${random_int(100, 999)}` → `427` |
+| `random_string` | `random_string([length])` | 随机字母数字字符串（默认长度 8） | `${random_string(12)}` → `aB3kQ9xMp2Yz` |
+| `uuid` | `uuid()` | UUID4 字符串 | `${uuid()}` → `a1b2c3d4-...` |
+| `env` | `env(NAME[, default])` | 读取环境变量 | `${env('HOME')}` → `/Users/me` |
+| `calc` | `calc(expression)` | 安全数学表达式计算（+, -, *, /, %, **） | `${calc('2 ** 10')}` → `1024` |
+
+### 扩展方式 A：全局注册
+
+在全局 `_default_registry` 实例上注册函数，使其在所有测试用例中可用：
+
+```python
+# my_burunner_extensions/functions.py
+
+from burunner.parser.variables import _default_registry
+
+
+@_default_registry.register("phone")
+def _fn_phone(prefix="138"):
+    """生成随机中国手机号。"""
+    import random
+    suffix = "".join([str(random.randint(0, 9)) for _ in range(8)])
+    return f"{prefix}{suffix}"
+
+
+@_default_registry.register("test_email")
+def _fn_test_email(name=None):
+    """生成测试邮箱地址。"""
+    import random, string
+    if name is None:
+        name = "".join(random.choices(string.ascii_lowercase, k=6))
+    return f"{name}@test.example.com"
+```
+
+在 YAML 中使用：
+
+```yaml
+steps:
+  - 输入手机号 ${phone()}
+  - 输入手机号 ${phone('159')}
+  - 输入邮箱 ${test_email()}
+  - 输入邮箱 ${test_email('alice')}
+```
+
+> **注意**：扩展模块必须在测试运行前被导入。可在 `conftest.py` 或启动钩子中添加 `import` 语句。
+
+### 扩展方式 B：通过 `resolve_text` 传入自定义函数
+
+对于隔离的或特定测试场景的函数，直接传递给 `resolve_text()`：
+
+```python
+from burunner.parser.variables import resolve_text
+
+custom_functions = {
+    "order_id": lambda: f"ORD-{__import__('time').strftime('%Y%m%d%H%M%S')}",
+    "greet": lambda name: f"Hello, {name}!",
+}
+
+result = resolve_text("${greet('World')} Order: ${order_id()}", custom_functions=custom_functions)
+# => "Hello, World! Order: ORD-20260603143000"
+```
+
+> **注意**：通过 `custom_functions` 传入的函数可以覆盖同名的内置函数。
+
+### 扩展方式 C：独立 VariableRegistry 实例
+
+适合库或插件开发者使用独立的注册表实例：
+
+```python
+from burunner.parser.variables import VariableRegistry
+
+my_registry = VariableRegistry()
+
+
+@my_registry.register("my_func")
+def _fn_my_func(arg1, arg2="default"):
+    return f"{arg1}_{arg2}"
+
+
+# 通过 custom_functions 参数传入 resolve_text
+from burunner.parser.variables import resolve_text
+
+result = resolve_text(
+    "${my_func('hello', 'world')}",
+    custom_functions=my_registry._functions,
+)
+# => "hello_world"
+```
+
+### 安全约束说明
+
+变量系统实施严格的沙箱机制：
+
+| 约束 | 详细说明 |
+| --- | --- |
+| `__builtins__` 被清空 | 所有 Python 内置函数在模板上下文中被移除 |
+| 危险名称被阻止 | `__import__`、`eval`、`exec`、`compile`、`open`、`getattr`、`setattr`、`globals`、`locals`、`breakpoint` 等 |
+| 预渲染校验 | `${...}` 表达式在渲染前会扫描危险模式 |
+| 仅注册函数可用 | 只有显式注入上下文的函数才能被调用 |
+| 建议使用简单类型 | 函数参数和返回值应为简单类型（`str`、`int`、`float`） |
+
+> **警告**：虽然 `<%...%>` 控制块已被转义，但如果注入了危险函数，`${...}` 表达式仍可执行任意 Python 代码。请始终将注册表限制在安全、无副作用的函数范围内。
+
+### 完整示例：测试数据生成器插件
+
+以下是一个完整的自定义函数包开发示例，用于生成测试数据：
+
+```python
+# my_burunner_testdata/__init__.py
+
+"""burunner 测试数据生成函数扩展包。"""
+
+import random
+import string
+
+from burunner.parser.variables import _default_registry
+
+
+@_default_registry.register("phone")
+def _fn_phone(prefix="138"):
+    """生成随机手机号。"""
+    suffix = "".join([str(random.randint(0, 9)) for _ in range(8)])
+    return f"{prefix}{suffix}"
+
+
+@_default_registry.register("test_email")
+def _fn_test_email(name=None):
+    """生成测试邮箱地址。"""
+    if name is None:
+        name = "".join(random.choices(string.ascii_lowercase, k=6))
+    return f"{name}@test.example.com"
+
+
+@_default_registry.register("id_card")
+def _fn_id_card():
+    """生成随机 18 位身份证号（仅用于测试）。"""
+    area = str(random.randint(110000, 659999))
+    year = str(random.randint(1970, 2005))
+    month = f"{random.randint(1, 12):02d}"
+    day = f"{random.randint(1, 28):02d}"
+    seq = f"{random.randint(1, 999):03d}"
+    base = f"{area}{year}{month}{day}{seq}"
+    # 简化校验位
+    check = str(random.randint(0, 9))
+    return f"{base}{check}"
+
+
+@_default_registry.register("company_name")
+def _fn_company_name():
+    """生成随机公司名（用于测试）。"""
+    prefixes = ["华创", "全球", "智联", "云端", "星辰"]
+    suffixes = ["科技", "信息", "网络", "数据", "系统"]
+    return f"{random.choice(prefixes)}{random.choice(suffixes)}有限公司"
+```
+
+在测试 YAML 中使用：
+
+```yaml
+cases:
+  - name: 用户注册测试
+    steps:
+      - 打开注册页面
+      - 输入手机号 ${phone()}
+      - 输入邮箱 ${test_email()}
+      - 输入身份证号 ${id_card()}
+      - 输入公司名称 ${company_name()}
+      - 点击提交
+```
+
+确保该扩展包在启动时被导入：
+
+```python
+# conftest.py 或启动脚本
+import my_burunner_testdata  # noqa: F401 — 触发注册
+```
+
 ---
 
 ## 新增数据源类型
@@ -450,6 +648,7 @@ burunner 各扩展点的设计原则：
 | --- | --- | --- |
 | LLM Provider | 注册表 + 策略 | `ProviderSpec` + `PROVIDER_REGISTRY` |
 | 通知渠道 | 插件化发现 | `BaseNotifier.send()` + `entry_points` |
+| 变量函数 | 注册表 + Mako 沙箱 | `VariableRegistry` + `_default_registry` |
 | 数据源 | 后缀匹配 + 加载函数 | `resolve_data_source()` |
 | 浏览器驱动 | 参数扩展 | `create_session()` |
 | 报告器 | 注册表 + 继承 | `BaseReporter` + `REPORTER_REGISTRY` |

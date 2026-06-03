@@ -14,6 +14,7 @@ dependencies = [
     "browser-use==0.12.9",
     "pyyaml>=6.0.2",
     "click==8.3.1",
+    "click-option-group>=0.5.6",
     "allure-python-commons>=2.14.3",
     "openai==2.16.0",
     "python-dotenv==1.2.2",
@@ -25,9 +26,18 @@ google = ["google-generativeai>=0.8.0"]
 anthropic = ["anthropic>=0.40.0"]
 groq = ["groq>=0.13.0"]
 ollama = ["ollama>=0.4.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "flake8>=6.0",
+]
 
 [project.scripts]
 burunner = "burunner.cli:main"
+
+[project.entry-points."burunner.reporters"]
+allure = "burunner.reporter.allure_reporter:AllureReporter"
+console = "burunner.reporter.console:ConsoleReporter"
 
 [tool.setuptools.packages.find]
 where = ["src"]
